@@ -52,12 +52,18 @@ export class MailService {
         template: "./reset-password",
         context: {
           name: data.name,
-          expiredAt,
           otp,
+          expiredAt,
         },
       });
 
-      this.logger.log(`Reset password email sent to ${data.email}` + otp);
+      this.logger.log(
+        `Reset password email sent to ${data.email}` +
+          " " +
+          otp +
+          " " +
+          expiredAt,
+      );
       return {
         success: true,
         message: "Reset password email sent successfully",
