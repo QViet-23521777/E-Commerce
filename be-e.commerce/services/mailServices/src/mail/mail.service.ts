@@ -32,7 +32,9 @@ export class MailService {
         },
       });
 
-      this.logger.log(`Verification email sent to ${data.email}`);
+      this.logger.log(
+        `Verification email sent to ${data.email} + " " + ${data.verifyUrl}`,
+      );
       return { success: true, message: "Verification email sent successfully" };
     } catch (error) {
       this.logger.error(`Failed: ${(error as Error).message}`);

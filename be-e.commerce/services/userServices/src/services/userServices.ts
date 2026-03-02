@@ -25,14 +25,14 @@ export async function registerUser({ name, email, password }: RegisterInput) {
   if (existingUser) throw new Error("EMAIL_EXISTS");
 
   const hashedPassword = await argon2.hash(password);
-  const verifyToken = crypto.randomBytes(32).toString("hex");
-  const verifyTokenExpiredAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const Token = crypto.randomBytes(32).toString("hex");
+  const TokenExpiredAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const newUser = new User({
     name,
     email,
     password: hashedPassword,
-    verifyToken,
-    verifyTokenExpiredAt,
+    Token,
+    TokenExpiredAt,
   });
   await newUser.save();
 
@@ -45,7 +45,7 @@ export async function registerUser({ name, email, password }: RegisterInput) {
   newUser.refreshToken = tokens.refreshToken;
   await newUser.save();
 
-  return { user: newUser, tokens, verifyToken };
+  return { user: newUser, tokens, Token };
 }
 
 export async function loginUser({ email, password }: LoginInput) {

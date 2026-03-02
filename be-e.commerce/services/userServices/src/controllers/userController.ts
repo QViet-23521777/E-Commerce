@@ -39,8 +39,12 @@ function handleError(c: Context, error: unknown) {
 export const register = async (c: Context) => {
   try {
     const { name, email, password } = await c.req.json();
-    const { user, tokens } = await registerUser({ name, email, password });
-    const verifyUrl = `${process.env.APP_URL || "http://localhost:3001"}/api/users/verify-email?token=${user.Token!}`;
+    const { user, tokens, Token } = await registerUser({
+      name,
+      email,
+      password,
+    });
+    const verifyUrl = `${process.env.APP_URL || "http://localhost:3001"}/api/users/verify-email?token=${Token!}`;
     mailClient.sendVerifyEmail(user.email, user.name, verifyUrl);
     return c.json(
       {
