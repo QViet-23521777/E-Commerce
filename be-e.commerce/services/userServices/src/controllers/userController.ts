@@ -271,19 +271,22 @@ export const sendVerifyPasswordEmail = async (c: Context) => {
   try {
     const { email } = await c.req.json();
     if (!email)
-      return c.json({ success: false, message: "Email is required" }, 404);
+      return c.json({ success: false, message: "Email is required" }, 400);
+
     const user = await getUserByEmail(email);
     if (!user)
       return c.json({ success: false, message: "User not found" }, 404);
-    const resetToken = setRessetPasswordToken(user.email).toString();
-    const resetUrl = `${process.env.APP_URL || "http://localhost:3001"}/api/users/verify-resetpassword?token=${resetToken}`;
-    mailClient.sendResetPassword(
+
+    const { token, otp } = await setRessetPasswordToken(user.email);
+
+    await mailClient.sendResetPassword(
       user.email,
       user.name,
-      resetToken,
-      resetUrl,
+      token,
+      otp,
       new Date(Date.now() + 3600000).toISOString(),
     );
+
     return c.json({ success: true, message: "Reset password email sent" }, 200);
   } catch (error) {
     return handleError(c, error);
@@ -293,9 +296,12 @@ export const sendVerifyPasswordEmail = async (c: Context) => {
 export const verifyingResetPassword = async (c: Context) => {
   try {
     const token = c.req.query("token");
-    const otp = await c.req.json();
+    const { otp } = await c.req.json();
+
     if (!token)
       return c.json({ success: false, message: "Token is required" }, 400);
+    if (!otp)
+      return c.json({ success: false, message: "OTP is required" }, 400);
     await verifyResetPassword(token, otp);
     return c.json({ success: true, message: "Token is valid" }, 200);
   } catch (error) {
@@ -305,12 +311,21 @@ export const verifyingResetPassword = async (c: Context) => {
 
 export const changePassword = async (c: Context) => {
   try {
-    const user = await getUserByToken("token");
-    if (!user) {
-      return c.json({ success: false, message: "User not found" });
-    }
-    const { token, newpassword } = await c.req.json();
-    await resetPassword(token, newpassword);
+    const { token, newPassword } = await c.req.json();
+
+    if (!token)
+      return c.json({ success: false, message: "Token is required" }, 400);
+    if (!newPassword)
+      return c.json(
+        { success: false, message: "New password is required" },
+        400,
+      );
+
+    const user = await getUserByToken(token);
+    if (!user)
+      return c.json({ success: false, message: "User not found" }, 404);
+
+    await resetPassword(token, newPassword);
     return c.json({ success: true, message: "Complete change password." }, 200);
   } catch (error) {
     return handleError(c, error);

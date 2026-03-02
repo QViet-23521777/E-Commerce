@@ -26,6 +26,7 @@ const UserSchema: Schema = new Schema(
     isVerified: { type: Boolean, default: false },
     Token: { type: String },
     TokenExpiredAt: { type: Date },
+    otp: { type: String },
   },
   {
     timestamps: true,

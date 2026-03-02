@@ -30,7 +30,7 @@ userRoutes.post(
   authenticate,
   sendVerifyPasswordEmail,
 );
-userRoutes.get("/verify-resetpassword", verifyingResetPassword);
+userRoutes.post("/verify-resetpassword", verifyingResetPassword);
 userRoutes.post("/forgot-password", authenticate, changePassword);
 
 userRoutes.use("/profile", authenticate);

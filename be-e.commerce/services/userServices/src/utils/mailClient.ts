@@ -15,14 +15,14 @@ export const mailClient = {
     email: string,
     name: string,
     token: string,
-    resetUrl: string,
+    otp: string,
     expiredAt: string,
   ) =>
     axios.post(`${MAIL_SERVICE_URL}/reset-password`, {
       email,
       name,
       token,
-      resetUrl,
+      otp,
       expiredAt,
     }),
 };

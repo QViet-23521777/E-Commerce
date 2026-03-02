@@ -125,7 +125,9 @@ export async function getUserByEmail(email: string) {
 }
 
 export async function getUserByToken(token: string) {
-  const user = await User.findOne({ token }).select("-password -refreshToken");
+  const user = await User.findOne({ Token: token }).select(
+    "-password -refreshToken",
+  );
   if (!user) throw new Error("USER_NOT_FOUND");
   return user;
 }
@@ -167,8 +169,11 @@ export async function setRessetPasswordToken(email: string) {
 
   return { token, otp };
 }
+
 export async function verifyResetPassword(token: string, otp: string) {
   const user = await User.findOne({ Token: token });
+  console.log(token);
+  console.log(user);
   if (!user) throw new Error("INVALID_TOKEN");
   if (!user.TokenExpiredAt || user.TokenExpiredAt < new Date()) {
     throw new Error("TOKEN_EXPIRED");

@@ -15,8 +15,8 @@ export interface ResetPasswordEmailInterface {
   name: string;
   email: string;
   token: string;
-  expriedAt: Date;
-  OTP: string;
+  otp: string;
+  expiredAt: string;
 }
 
 export interface MailResultInterface {

@@ -44,8 +44,8 @@ export class MailService {
     data: ResetPasswordEmailInterface,
   ): Promise<MailResultInterface> {
     try {
-      const expiredAt = new Date(data.expriedAt).toLocaleString();
-      const otp = randomInt(100000, 1000000);
+      const expiredAt = new Date(data.expiredAt).toLocaleString();
+      const otp = data.otp;
       await this.mailerService.sendMail({
         to: data.email,
         subject: "Reset Your Password",
@@ -57,7 +57,7 @@ export class MailService {
         },
       });
 
-      this.logger.log(`Reset password email sent to ${data.email}`);
+      this.logger.log(`Reset password email sent to ${data.email}` + otp);
       return {
         success: true,
         message: "Reset password email sent successfully",
