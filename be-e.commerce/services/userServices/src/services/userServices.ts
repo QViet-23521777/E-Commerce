@@ -1,9 +1,9 @@
 import { User } from "../models/userModel";
 import argon2 from "argon2";
-import { JwtService } from "../utils/jwtService";
 import crypto from "crypto";
-import { randomInt } from "crypto";
-import { createHash } from "crypto";
+import { randomInt, createHash } from "crypto";
+import { JwtService } from "../utils/jwtService";
+
 export interface RegisterInput {
   name: string;
   email: string;
@@ -27,6 +27,7 @@ export async function registerUser({ name, email, password }: RegisterInput) {
   const hashedPassword = await argon2.hash(password);
   const Token = crypto.randomBytes(32).toString("hex");
   const TokenExpiredAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
   const newUser = new User({
     name,
     email,
@@ -172,8 +173,6 @@ export async function setRessetPasswordToken(email: string) {
 
 export async function verifyResetPassword(token: string, otp: string) {
   const user = await User.findOne({ Token: token });
-  console.log(token);
-  console.log(user);
   if (!user) throw new Error("INVALID_TOKEN");
   if (!user.TokenExpiredAt || user.TokenExpiredAt < new Date()) {
     throw new Error("TOKEN_EXPIRED");

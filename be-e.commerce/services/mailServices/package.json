@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "dev": "ts-node src/main.ts",
     "start": "node dist/main.js",
     "start:dev": "ts-node src/main.ts",
     "start:watch": "nodemon --exec ts-node src/main.ts"
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/nodemailer": "^7.0.10",
+    "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

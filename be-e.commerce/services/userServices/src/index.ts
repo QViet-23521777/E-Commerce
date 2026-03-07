@@ -1,8 +1,11 @@
+import "dotenv/config";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import userRoutes from "./routes/userRoutes";
 import mongoose from "mongoose";
+
 const app = new Hono();
+
 app.use("*", async (c, next) => {
   console.log(`${c.req.method} ${c.req.url}`);
   await next();
@@ -22,7 +25,6 @@ mongoose
   .connect(mongoUri)
   .then(() => {
     console.log("Connected to MongoDB");
-
     console.log(`User service is running on http://localhost:${port}`);
     serve({ fetch: app.fetch.bind(app), port });
   })

@@ -1,0 +1,9 @@
+{
+  "name": "be",
+  "scripts": {
+    "dev": "concurrently --names \"GATEWAY,USER,MAIL\" \"npm run dev --prefix gateway\" \"npm run dev --prefix services/userServices\" \"npm run dev --prefix services/mailServices\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

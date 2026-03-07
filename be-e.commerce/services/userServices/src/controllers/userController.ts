@@ -1,6 +1,4 @@
-import { User } from "./../models/userModel";
 import { Context } from "hono";
-import { JwtService } from "../utils/jwtService";
 import {
   registerUser,
   loginUser,
@@ -17,9 +15,7 @@ import {
   getUserByToken,
   getUserByEmail,
 } from "../services/userServices";
-import crypto from "crypto";
 import { mailClient } from "../utils/mailClient";
-import { set } from "mongoose";
 
 const HTTP_STATUS: Record<string, number> = {
   EMAIL_EXISTS: 400,
@@ -44,8 +40,10 @@ export const register = async (c: Context) => {
       email,
       password,
     });
+
     const verifyUrl = `${process.env.APP_URL || "http://localhost:3001"}/api/users/verify-email?token=${Token!}`;
     mailClient.sendVerifyEmail(user.email, user.name, verifyUrl);
+
     return c.json(
       {
         success: true,
@@ -135,42 +133,14 @@ export const refreshToken = async (c: Context) => {
 
 export const logout = async (c: Context) => {
   try {
-    const { userId } = await c.req.json();
-    if (!userId) {
-      return c.json({ success: false, message: "User ID is required" }, 400);
-    }
+    const user = c.get("user") as any;
+    if (!user) return c.json({ success: false, message: "Unauthorized" }, 401);
 
-    await logoutUser(userId);
+    await logoutUser(user.id);
 
     return c.json({ success: true, message: "Logout successful" }, 200);
   } catch (error) {
     return handleError(c, error);
-  }
-};
-
-export const verifyToken = async (c: Context) => {
-  try {
-    const authHeader = c.req.header("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return c.json({ success: false, message: "No token provided" }, 401);
-    }
-
-    const token = authHeader.substring(7);
-    const decoded = JwtService.verifyAccessToken(token);
-
-    return c.json(
-      {
-        success: true,
-        data: {
-          userId: decoded.userId,
-          email: decoded.email,
-          role: decoded.role,
-        },
-      },
-      200,
-    );
-  } catch (error) {
-    return c.json({ success: false, message: "Invalid or expired token" }, 401);
   }
 };
 
@@ -306,7 +276,9 @@ export const verifyingResetPassword = async (c: Context) => {
       return c.json({ success: false, message: "Token is required" }, 400);
     if (!otp)
       return c.json({ success: false, message: "OTP is required" }, 400);
+
     await verifyResetPassword(token, otp);
+
     return c.json({ success: true, message: "Token is valid" }, 200);
   } catch (error) {
     return handleError(c, error);
@@ -330,6 +302,7 @@ export const changePassword = async (c: Context) => {
       return c.json({ success: false, message: "User not found" }, 404);
 
     await resetPassword(token, newPassword);
+
     return c.json({ success: true, message: "Complete change password." }, 200);
   } catch (error) {
     return handleError(c, error);

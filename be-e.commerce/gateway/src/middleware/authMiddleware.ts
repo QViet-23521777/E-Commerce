@@ -18,11 +18,11 @@ export const authenticate = async (c: Context, next: Next) => {
     const token = authHeader.substring(7);
     const decoded = JwtUtils.verifyToken(token, process.env.JWT_SECRET!);
 
-    c.set("user", {
-      id: decoded.userId,
-      email: decoded.email,
-      role: decoded.role,
-    });
+    c.req.raw.headers.set("x-user-id", decoded.userId);
+    c.req.raw.headers.set("x-user-email", decoded.email);
+    c.req.raw.headers.set("x-user-role", decoded.role ?? "user");
+
+    c.req.raw.headers.set("x-internal-secret", process.env.INTERNAL_SECRET!);
 
     await next();
   } catch (error) {
@@ -32,10 +32,10 @@ export const authenticate = async (c: Context, next: Next) => {
 
 export const authorize = (...roles: string[]) => {
   return async (c: Context, next: Next) => {
-    const user = c.get("user") as any;
-    const role = user?.role;
+    const userId = c.req.header("x-user-id");
+    const role = c.req.header("x-user-role");
 
-    if (!role || !roles.includes(role)) {
+    if (!userId || !role || !roles.includes(role)) {
       return c.json(
         {
           success: false,
@@ -48,4 +48,9 @@ export const authorize = (...roles: string[]) => {
 
     await next();
   };
+};
+
+export const injectInternalSecret = async (c: Context, next: Next) => {
+  c.req.raw.headers.set("x-internal-secret", process.env.INTERNAL_SECRET!);
+  await next();
 };

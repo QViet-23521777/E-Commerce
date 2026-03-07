@@ -1,83 +1,55 @@
 import jwt from "jsonwebtoken";
 
-interface JwtPayload {
+export interface JwtPayload {
   userId: string;
   email: string;
   role?: string;
 }
 
 export class JwtService {
-  private static ACCESS_SECRET =
-    process.env.JWT_ACCESS_SECRET || "your_access_secret_key";
-  private static REFRESH_SECRET =
-    process.env.JWT_REFRESH_SECRET || "your_refresh_secret_key";
-  private static ACCESS_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "15m";
-  private static REFRESH_EXPIRES_IN =
+  private static readonly accessSecret = process.env.JWT_SECRET!;
+  private static readonly refreshSecret = process.env.JWT_REFRESH_SECRET!;
+  private static readonly accessExpiresIn = process.env.JWT_EXPIRES_IN || "15m";
+  private static readonly refreshExpiresIn =
     process.env.JWT_REFRESH_EXPIRES_IN || "7d";
 
-  static generateAccessToken(payload: JwtPayload): string {
-    return jwt.sign(payload, this.ACCESS_SECRET, {
-      expiresIn: this.ACCESS_EXPIRES_IN as any,
-      issuer: "user-service",
+  // ✅ Dùng khi login / register
+  static generateTokenPair(payload: JwtPayload): {
+    accessToken: string;
+    refreshToken: string;
+  } {
+    const accessToken = jwt.sign(payload, this.accessSecret, {
+      expiresIn: this.accessExpiresIn as any,
     });
-  }
-
-  static generateRefreshToken(payload: JwtPayload): string {
-    return jwt.sign(payload, this.REFRESH_SECRET, {
-      expiresIn: this.REFRESH_EXPIRES_IN as any,
-      issuer: "user-service",
+    const refreshToken = jwt.sign(payload, this.refreshSecret, {
+      expiresIn: this.refreshExpiresIn as any,
     });
-  }
-  static generateEmailVerificationToken(payload: JwtPayload): string {
-    return jwt.sign(payload, this.ACCESS_SECRET, {
-      expiresIn: "24h",
-      issuer: "user-service",
-    });
-  }
-
-  static verifyAccessToken(token: string): JwtPayload {
-    try {
-      return jwt.verify(token, this.ACCESS_SECRET) as JwtPayload;
-    } catch (error) {
-      if (error instanceof jwt.TokenExpiredError) {
-        throw new Error("Access token has expired");
-      }
-      throw new Error("Invalid access token");
-    }
-  }
-
-  static verifyRefreshToken(token: string): JwtPayload {
-    try {
-      return jwt.verify(token, this.REFRESH_SECRET) as JwtPayload;
-    } catch (error) {
-      if (error instanceof jwt.TokenExpiredError) {
-        throw new Error("Refresh token has expired");
-      }
-      throw new Error("Invalid refresh token");
-    }
-  }
-
-  static generateTokenPair(payload: JwtPayload) {
-    const accessToken = this.generateAccessToken(payload);
-    const refreshToken = this.generateRefreshToken(payload);
     return { accessToken, refreshToken };
   }
 
-  static generateResetPasswordToken(payload: JwtPayload): string {
-    return jwt.sign(payload, this.ACCESS_SECRET, {
-      expiresIn: "1h",
-      issuer: "user-service",
+  // ✅ Dùng khi refresh token
+  static generateAccessToken(payload: JwtPayload): string {
+    return jwt.sign(payload, this.accessSecret, {
+      expiresIn: this.accessExpiresIn as any,
     });
   }
 
-  static verifyResetPasswordToken(token: string): JwtPayload {
+  // ✅ Dùng khi refresh token — verify refresh token
+  static verifyRefreshToken(token: string): JwtPayload {
     try {
-      return jwt.verify(token, this.ACCESS_SECRET) as JwtPayload;
+      return jwt.verify(token, this.refreshSecret) as JwtPayload;
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {
-        throw new Error("Reset password token has expired");
+        throw new Error("TOKEN_EXPIRED");
       }
-      throw new Error("Invalid reset password token");
+      throw new Error("INVALID_TOKEN");
     }
+  }
+
+  // ✅ Dùng khi reset password
+  static generateResetPasswordToken(payload: JwtPayload): string {
+    return jwt.sign(payload, this.accessSecret, {
+      expiresIn: "1h",
+    });
   }
 }

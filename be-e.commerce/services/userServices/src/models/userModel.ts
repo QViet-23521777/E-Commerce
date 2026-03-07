@@ -1,11 +1,12 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
-import { time } from "node:console";
 export interface User extends Document {
   name: string;
   email: string;
   password: string;
   walletId?: string;
   refreshToken?: string;
+  preferences?: [string];
+  search?: [string];
   createdAt: Date;
   updatedAt: Date;
   isActive: boolean;
