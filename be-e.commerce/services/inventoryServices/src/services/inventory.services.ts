@@ -1,5 +1,5 @@
 import cloudinary from "../config/cloudinary";
-import { Inventory, IInventory } from "../models/inventory.model";
+import { Product, PProduct } from "../models/product.model";
 
 const track: {
   price: number;
@@ -13,7 +13,7 @@ const track: {
   point: 1000,
 };
 
-export const createInventory = async (
+export const createProduct = async (
   name: string,
   description: string,
   price: number,
@@ -27,7 +27,7 @@ export const createInventory = async (
     // Create an upload stream to Cloudinary
     // The callback is triggered once the upload completes or fails
     const stream = cloudinary.uploader.upload_stream(
-      { folder: "inventory" }, // save to "inventory" folder on Cloudinary
+      { folder: "Product" }, // save to "Product" folder on Cloudinary
       (error, result) => {
         if (error)
           reject(error); // upload failed → reject with error
@@ -43,7 +43,7 @@ export const createInventory = async (
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
-  const inventory = await Inventory.create({
+  const product = await Product.create({
     name,
     description,
     price,
@@ -54,26 +54,26 @@ export const createInventory = async (
     ...(numPurchases !== undefined && { numPurchases }),
   });
 
-  return inventory;
+  return product;
 };
 
-export const getInventoryById = async (inventoryId: string) => {
-  const inventory = await Inventory.findById(inventoryId);
-  if (!inventory) throw new Error("Inventory does not exists");
-  return inventory;
+export const getProductById = async (ProductId: string) => {
+  const product = await Product.findById(ProductId);
+  if (!Product) throw new Error("Product does not exists");
+  return Product;
 };
 
 export const getTopByField = async (field: string, value: unknown) => {
-  const exist = await Inventory.exists({ field: { $exist: true } });
+  const exist = await Product.exists({ field: { $exist: true } });
   if (!exist) throw new Error("Field does not exists");
-  const rs = await Inventory.find({ [field]: value })
+  const rs = await Product.find({ [field]: value })
     .sort({ field: -1 })
     .limit(10);
   if (!rs.length) throw new Error(`Field "${field}" does not exist`);
   return rs;
 };
 
-export const getTopInventoryPurchases = async (
+export const getTopProductPurchases = async (
   limit: number = 10,
   lastnumPurchases?: number,
   lastId?: string,
@@ -89,7 +89,7 @@ export const getTopInventoryPurchases = async (
     ];
   }
 
-  const items = await Inventory.find(query)
+  const items = await Product.find(query)
     .sort({ numPurchases: -1, _id: 1 })
     .limit(limit);
 
@@ -118,7 +118,7 @@ export const getTopSale = async (
     ];
   }
 
-  const items = await Inventory.find(query)
+  const items = await Product.find(query)
     .sort({ sale: -1, _id: 1 })
     .limit(limit);
 
@@ -147,7 +147,7 @@ export const getTopPoint = async (
     ];
   }
 
-  const items = await Inventory.find(query)
+  const items = await Product.find(query)
     .sort({ point: -1, _id: 1 })
     .limit(limit);
 
@@ -169,7 +169,7 @@ export const getTopByType = async (
   if (lastId) {
     query._id = { $gt: lastId };
   }
-  const items = await Inventory.find(query)
+  const items = await Product.find(query)
     .sort({ _id: 1, sale: 1, numPurchases: -1, point: -1 })
     .limit(limit);
 
@@ -183,7 +183,7 @@ export const getTopByType = async (
 };
 
 export const getTopByListType = async (limit: number = 2, type: string[]) => {
-  const listItems: IInventory[] = [];
+  const listItems: PProduct[] = [];
   let lastPriceId: string = "";
   let lastSaleId: string = "";
   let lastnumPurchasesId: string = "";
@@ -204,10 +204,10 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
       for (const ord of order) {
         if (listItems.length >= limit) break;
 
-        let items: IInventory[] = [];
+        let items: PProduct[] = [];
 
         if (ord === "price") {
-          items = await Inventory.find()
+          items = await Product.find()
             .sort({ [element]: -1, _id: 1, [ord]: 1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -216,7 +216,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
             lastPrice = lastItem.price;
           }
         } else if (ord === "sale") {
-          items = await Inventory.find()
+          items = await Product.find()
             .sort({ [element]: -1, _id: 1, [ord]: -1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -225,7 +225,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
             lastSale = lastItem.sale ?? 0;
           }
         } else if (ord === "numPurchases") {
-          items = await Inventory.find()
+          items = await Product.find()
             .sort({ [element]: -1, _id: 1, [ord]: -1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -234,7 +234,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
             lastnumPurchases = lastItem.numPurchases ?? 0;
           }
         } else if (ord === "point") {
-          items = await Inventory.find()
+          items = await Product.find()
             .sort({ [element]: -1, _id: 1, [ord]: -1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -274,7 +274,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
   };
 };
 
-export const findInventory = async (
+export const findProduct = async (
   find: string,
   limit: number = 10,
   lastTrack?: number,
@@ -285,7 +285,7 @@ export const findInventory = async (
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
-  const items = await Inventory.find({
+  const items = await Product.find({
     normalize: { $regex: normalizedFind, $options: "i" },
   }).limit(limit);
 

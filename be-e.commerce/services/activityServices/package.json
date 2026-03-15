@@ -1,0 +1,31 @@
+{
+  "name": "activityservices",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon --watch src --ext ts --exec ts-node src/app.ts",
+    "build": "rimraf dist && tsc",
+    "start": "node dist/app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "dotenv": "^16.0.0",
+    "helmet": "^8.1.0",
+    "hono": "^4.12.8",
+    "ioredis": "^5.10.0",
+    "kafkajs": "^2.2.4",
+    "mongoose": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "nodemon": "^3.0.0",
+    "rimraf": "^6.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}
