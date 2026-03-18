@@ -1,9 +1,8 @@
 import mongoose from "mongoose";
-
 export const connectDatabase = async () => {
   try {
     const mongoURI =
-      process.env.MONGO_URI || "mongodb://localhost:27017/ecommerce_users";
+      process.env.MONGO_URI || "mongodb://mongodb:27017/activity";
 
     await mongoose.connect(mongoURI);
     console.log("Connected to MongoDB");
