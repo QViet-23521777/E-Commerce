@@ -2,7 +2,7 @@ import { UserActivityModel } from "../model/activity.model";
 import { redisService } from "./redis.service";
 import { kafkaService } from "./kafka.service";
 
-const flushBatch = async (userId: string) => {
+const flushBatch = async (userId: string, clearAfter: boolean = false) => {
   const queue = redisService.getQueue(userId);
   if (queue.length === 0) return { flushed: 0 };
 
@@ -24,19 +24,22 @@ const flushBatch = async (userId: string) => {
         if (event.productId)
           await redisService.addRecentPurchase(userId, event.productId);
         break;
+      case "click":
+        if (event.productId)
+          await redisService.addRecentView(userId, event.productId);
+        break;
     }
   }
 
-  const importantEvents = queue.filter(
-    (e) => e.activity === "buy" || e.activity === "click",
-  );
-  for (const event of importantEvents) {
+  for (const event of queue) {
     await kafkaService.publishActivity(event);
   }
 
   const flushedCount = queue.length;
 
-  redisService.clearQueue(userId);
+  if (clearAfter) {
+    redisService.clearQueue(userId);
+  }
 
   return { flushed: flushedCount };
 };
@@ -50,15 +53,24 @@ export const addActivity = async (data: {
   metadata?: Record<string, unknown>;
 }) => {
   const event = { ...data, timestamp: new Date() };
+  const queue = redisService.getQueue(data.userId);
 
+  if (queue.length >= 20) {
+    return {
+      queued: false,
+      message: `Queue đã đầy 20 events, vui lòng flush trước`,
+      queueSize: queue.length,
+    };
+  }
   const shouldFlush = redisService.addToQueue(data.userId, event);
 
   if (shouldFlush) {
     const result = await flushBatch(data.userId);
     return {
-      queued: false,
-      message: `Đủ 10 events → đã flush`,
+      queued: true,
+      message: `Đủ 10 events → đã flush, queue vẫn giữ`,
       flushed: result.flushed,
+      queueSize: redisService.getQueue(data.userId).length,
     };
   }
 
@@ -110,4 +122,13 @@ export const getRecentActivities = async (userId: string) => {
   ]);
 
   return { recentViews, searchHistory, recentPurchases };
+};
+
+export const clearActivity = async (userId: string) => {
+  const queueSize = redisService.getQueue(userId).length;
+  redisService.clearQueue(userId);
+  return {
+    success: true,
+    message: `Đã xóa ${queueSize} events khỏi queue`,
+  };
 };

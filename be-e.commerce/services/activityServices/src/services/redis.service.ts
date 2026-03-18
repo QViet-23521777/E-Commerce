@@ -3,8 +3,9 @@ import { config } from "../config";
 
 class RedisServices {
   private client: Redis;
-  private eventQueue: Map<string, any[]> = new Map(); // queue lưu tạm event
-  private BATCH_SIZE = 10; // xử lý khi đủ 10 event
+  private eventQueue: Map<string, any[]> = new Map();
+  private BATCH_SIZE = 10;
+  private MAX_Size = 20;
 
   constructor() {
     this.client = new Redis(config.redisUrl);
@@ -18,6 +19,9 @@ class RedisServices {
     }
 
     const queue = this.eventQueue.get(userId)!;
+    if (queue.length >= this.MAX_Size) {
+      return true;
+    }
     queue.push(event);
 
     return queue.length >= this.BATCH_SIZE;

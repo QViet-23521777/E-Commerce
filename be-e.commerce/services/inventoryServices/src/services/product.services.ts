@@ -57,10 +57,10 @@ export const createProduct = async (
   return product;
 };
 
-export const getProductById = async (ProductId: string) => {
-  const product = await Product.findById(ProductId);
-  if (!Product) throw new Error("Product does not exists");
-  return Product;
+export const getProductById = async (productId: string) => {
+  const product = await Product.findById(productId);
+  if (!product) throw new Error("Product does not exists");
+  return product;
 };
 
 export const getTopByField = async (field: string, value: unknown) => {
