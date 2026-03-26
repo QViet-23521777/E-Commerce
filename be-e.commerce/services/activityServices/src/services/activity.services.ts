@@ -31,15 +31,15 @@ const flushBatch = async (userId: string, clearAfter: boolean = false) => {
     }
   }
 
-  for (const event of queue) {
-    await kafkaService.publishActivity(event);
-  }
+  await kafkaService.publishActivity({
+    userId,
+    events: queue,
+    totalEvents: queue.length,
+    timestamp: new Date(),
+  });
 
   const flushedCount = queue.length;
-
-  if (clearAfter) {
-    redisService.clearQueue(userId);
-  }
+  if (clearAfter) redisService.clearQueue(userId);
 
   return { flushed: flushedCount };
 };

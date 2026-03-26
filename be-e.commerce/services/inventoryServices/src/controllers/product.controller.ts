@@ -1,4 +1,3 @@
-import { PProduct } from "./../models/product.model";
 import { Context } from "hono";
 import {
   createProduct,
@@ -9,6 +8,8 @@ import {
   getTopByType,
   getTopByListType,
   findProduct,
+  trackRecommendation,
+  trackingWithoutData,
 } from "../services/product.services";
 
 // ─── TẠO SẢN PHẨM ───────────────────────────────────
@@ -160,6 +161,55 @@ export const handleFindProduct = async (c: Context) => {
 
     const result = await findProduct(find, limit, lastTrack, lastId);
     return c.json({ success: true, ...result });
+  } catch (error) {
+    return c.json({ success: false, message: "Internal server error" }, 500);
+  }
+};
+
+export const handleTracking = async (c: Context) => {
+  try {
+    const body = await c.req.json();
+    const { userId, events } = body;
+    if (!userId) {
+      return c.json({ success: false, message: "userId là bắt buộc" }, 400);
+    }
+
+    if (!Array.isArray(events) || events.length === 0) {
+      const result = await trackingWithoutData();
+      return c.json({ success: true, ...result });
+    }
+    const validActivities = ["view", "search", "click", "buy"];
+    for (const event of events) {
+      if (!validActivities.includes(event.activity)) {
+        return c.json(
+          {
+            success: false,
+            message: `activity không hợp lệ: ${event.activity}`,
+          },
+          400,
+        );
+      }
+      if (event.activity === "search" && !event.keyword) {
+        return c.json(
+          {
+            success: false,
+            message: "keyword là bắt buộc khi activity là search",
+          },
+          400,
+        );
+      }
+    }
+    const result = await trackRecommendation({ userId, events });
+    return c.json({ success: true, ...result });
+  } catch (error) {
+    return c.json({ success: false, message: "Internal server error" }, 500);
+  }
+};
+
+export const handleTrackingWithoutData = async (c: Context) => {
+  try {
+    const result = await trackingWithoutData();
+    return c.json({ success: true, data: result }, 200);
   } catch (error) {
     return c.json({ success: false, message: "Internal server error" }, 500);
   }

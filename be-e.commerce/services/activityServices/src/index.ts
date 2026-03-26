@@ -1,9 +1,8 @@
-import { Hono } from "Hono";
+import { Hono } from "hono";
 import "dotenv/config";
 import { serve } from "@hono/node-server";
 import mongoose from "mongoose";
-import Redis from "ioredis";
-import { parse } from "path";
+import activityRoutes from "./routes/activity.routes";
 
 const app = new Hono();
 
@@ -12,7 +11,7 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-//app.route("/api/track-users", trackRoute);
+app.route("/api/activities", activityRoutes);
 
 app.get("/health", (c) => {
   return c.json({ status: "ok", timestamp: new Date().toISOString() });

@@ -15,18 +15,28 @@ export interface PProduct extends Document {
   track?: number;
 }
 
-const InventorySchema: Schema = new Schema(
+const InventorySchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
     normalize: { type: String, required: true },
     description: { type: String, required: true },
-    price: { type: Number, required: true, min: 0 },
-    sale: { type: Number, default: 0, min: 0 },
-    imageUrl: { type: String, required: true },
-    point: { type: Number, required: true, default: 0 },
+    price: { type: Number, required: true },
+
+    sale: { type: Number, default: 0 },
+
+    imageUrl: { type: String },
+
+    type: { type: String },
+
+    point: { type: Number, default: 0 },
+
     numPurchases: { type: Number, default: 0 },
+
+    track: { type: Number },
   },
   { timestamps: true },
 );
 
-export const Product = mongoose.model<PProduct>("Product", InventorySchema);
+export const Product =
+  mongoose.models.Product ||
+  mongoose.model<PProduct>("Product", InventorySchema, "product");

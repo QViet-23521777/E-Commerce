@@ -1,16 +1,16 @@
 import cloudinary from "../config/cloudinary";
 import { Product, PProduct } from "../models/product.model";
-
+import { redisService } from "./redis.service";
 const track: {
   price: number;
   sale: number;
   numPurchases: number;
   point: number;
 } = {
-  price: 1000,
-  sale: 800,
-  numPurchases: 1500,
-  point: 1000,
+  price: 1,
+  sale: 0.8,
+  numPurchases: 1.5,
+  point: 10,
 };
 
 export const createProduct = async (
@@ -314,5 +314,185 @@ export const findProduct = async (
     nextCursor: lastItem
       ? { lastTrack: lastItem.track, lastId: lastItem._id }
       : null,
+  };
+};
+
+const ACTIVITY = {
+  view: 1500,
+  search: 200,
+  click: 300,
+  buy: 500,
+};
+
+export const trackRecommendation = async (data: {
+  userId: string;
+  events: {
+    activity: string;
+    productId?: string;
+    categoryId?: string;
+    keyword?: string;
+  }[];
+}) => {
+  const { userId, events } = data;
+
+  const listItems: PProduct[] = [];
+
+  let lastFindId: string = "";
+  let lastFindTrack: number = 0;
+  let lastPurchasesId: string = "";
+  let lastPurchasesNum: number = 0;
+  let lastSaleId: string = "";
+  let lastSaleNum: number = 0;
+  let lastPointId: string = "";
+  let lastPointNum: number = 0;
+
+  for (const event of events) {
+    const { activity, productId, categoryId, keyword } = event;
+
+    if (activity === "search" && keyword && keyword !== "") {
+      const result = await findProduct(
+        keyword.toString(),
+        2,
+        lastFindTrack,
+        lastFindId,
+      );
+
+      const lastItem = result.items[result.items.length - 1];
+      if (lastItem) {
+        lastFindId = lastItem._id.toString();
+        lastFindTrack = Number(lastItem.track ?? 0);
+        listItems.push(...result.items);
+      }
+    }
+
+    if ((activity === "view" || activity === "click") && categoryId) {
+      const result = await getTopByType(2, lastPurchasesId, categoryId);
+
+      const lastItem = result.items[result.items.length - 1];
+      if (lastItem) {
+        lastPurchasesId = lastItem._id.toString();
+        listItems.push(...result.items);
+      }
+    }
+
+    // if (activity === "buy") {
+    //   const result = await getTopProductPurchases(
+    //     2,
+    //     lastPurchasesNum,
+    //     lastPurchasesId,
+    //   );
+
+    //   const lastItem = result.items[result.items.length - 1];
+    //   if (lastItem) {
+    //     lastPurchasesId = lastItem._id.toString();
+    //     lastPurchasesNum = lastItem.numPurchases ?? 0;
+    //     listItems.push(...result.items);
+    //   }
+    // }
+  }
+
+  for (const item of listItems) {
+    item.track =
+      item.price * track.price +
+      (item.sale ?? 0) * track.sale +
+      (item.numPurchases ?? 0) * track.numPurchases +
+      item.point * track.point;
+  }
+
+  listItems.sort((a, b) => (b.track ?? 0) - (a.track ?? 0));
+
+  await redisService.setRecommendationData(userId, {
+    productId: listItems.map((item) => item._id.toString()),
+    types: [...new Set(listItems.map((item) => item.type))],
+    updatedAt: new Date(),
+  });
+
+  return {
+    userId,
+    total: listItems.length,
+    cursors: {
+      lastFindId,
+      lastFindTrack,
+      lastPurchasesId,
+      lastPurchasesNum,
+      lastSaleId,
+      lastSaleNum,
+      lastPointId,
+      lastPointNum,
+    },
+    items: listItems,
+  };
+};
+
+export const trackingWithoutData = async () => {
+  const listItems: PProduct[] = [];
+
+  let lastPurchasesId: string = "";
+  let lastPurchasesNum: number = 0;
+  let lastSaleId: string = "";
+  let lastSaleNum: number = 0;
+  let lastPointId: string = "";
+  let lastPointNum: number = 0;
+
+  const data = await Product.find({}).limit(5);
+  console.log(data.length);
+  const resultPurchases = await getTopProductPurchases(
+    2,
+    lastPurchasesNum,
+    lastPurchasesId,
+  );
+  const lastPurchasesItem =
+    resultPurchases.items[resultPurchases.items.length - 1];
+  if (lastPurchasesItem) {
+    lastPurchasesId = lastPurchasesItem._id.toString();
+    lastPurchasesNum = lastPurchasesItem.numPurchases ?? 0;
+    listItems.push(...resultPurchases.items);
+  }
+
+  const resultPoint = await getTopPoint(2, lastPointNum, lastPointId);
+  const lastPointItem = resultPoint.items[resultPoint.items.length - 1];
+  if (lastPointItem) {
+    lastPointId = lastPointItem._id.toString();
+    lastPointNum = lastPointItem.point ?? 0;
+    listItems.push(...resultPoint.items);
+  }
+
+  const resultSale = await getTopSale(2, lastSaleNum, lastSaleId);
+  const lastSaleItem = resultSale.items[resultSale.items.length - 1];
+  if (lastSaleItem) {
+    lastSaleId = lastSaleItem._id.toString();
+    lastSaleNum = lastSaleItem.sale ?? 0;
+    listItems.push(...resultSale.items);
+  }
+
+  const seen = new Set<string>();
+  const uniqueItems = listItems.filter((item) => {
+    const id = item._id.toString();
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  for (const item of uniqueItems) {
+    item.track =
+      item.price * track.price +
+      (item.sale ?? 0) * track.sale +
+      (item.numPurchases ?? 0) * track.numPurchases +
+      item.point * track.point;
+  }
+
+  uniqueItems.sort((a, b) => (b.track ?? 0) - (a.track ?? 0));
+
+  return {
+    total: uniqueItems.length,
+    cursors: {
+      lastPurchasesId,
+      lastPurchasesNum,
+      lastSaleId,
+      lastSaleNum,
+      lastPointId,
+      lastPointNum,
+    },
+    items: uniqueItems,
   };
 };
