@@ -18,5 +18,11 @@ services:
   mailServices:
     build: ./services/mailServices
     ports:
-      - "3003:3002"
+      - "3002:3002"
     env_file: ./services/mailServices/.env
+
+  productServices:
+    build: ./services/inventoryServices
+    ports:
+      - "3003:3003"
+    env_file: ./services/inventoryServices/.env

@@ -9,7 +9,6 @@ class RedisServices {
 
   constructor() {
     this.client = new Redis(config.redisUrl);
-    this.client.on("connect", () => console.log("✅ Redis connected"));
     this.client.on("error", (err) => console.error("❌ Redis error:", err));
   }
 
@@ -37,9 +36,13 @@ class RedisServices {
 
   async addRecentView(userId: string, productId: string): Promise<void> {
     const key = `recent_views:${userId}`;
+    await this.client.lrem(key, 0, productId);
     await this.client.lpush(key, productId);
     await this.client.ltrim(key, 0, 49);
     await this.client.expire(key, 60 * 60 * 24 * 7);
+
+    const result = await this.client.lrange(key, 0, -1);
+    console.log(`recent_views của ${userId}:`, result);
   }
 
   async getRecentView(userId: string): Promise<string[]> {

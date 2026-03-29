@@ -20,15 +20,26 @@ class KafkaService {
   }
 
   async publishActivity(activity: object): Promise<void> {
-    await this.producer.send({
-      topic: config.kafkaTopic,
-      messages: [
-        {
-          key: (activity as any).userId,
-          value: JSON.stringify(activity),
-        },
-      ],
-    });
+    try {
+      await this.producer.send({
+        topic: config.kafkaTopic,
+        messages: [
+          { key: (activity as any).userId, value: JSON.stringify(activity) },
+        ],
+      });
+    } catch (err: any) {
+      if (err.message?.includes("not connected")) {
+        await this.connect();
+        await this.producer.send({
+          topic: config.kafkaTopic,
+          messages: [
+            { key: (activity as any).userId, value: JSON.stringify(activity) },
+          ],
+        });
+      } else {
+        throw err;
+      }
+    }
   }
 
   async disconnect(): Promise<void> {

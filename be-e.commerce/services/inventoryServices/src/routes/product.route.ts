@@ -29,7 +29,7 @@ router.get("/top/point", validatePagination, handleGetTopPoint);
 router.get("/top/list-type", validatePagination, handleGetTopByListType);
 router.get("/top/type/:type", validatePagination, handleGetTopByType);
 router.get("/recommend", handleTrackingWithoutData);
-router.get("/recommend/:userId", validatePagination, handleTracking);
+router.post("/recommend/:userId", validatePagination, handleTracking);
 
 router.get("/:productId", ProductById);
 

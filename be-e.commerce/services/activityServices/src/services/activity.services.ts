@@ -2,12 +2,12 @@ import { UserActivityModel } from "../model/activity.model";
 import { redisService } from "./redis.service";
 import { kafkaService } from "./kafka.service";
 
-const flushBatch = async (userId: string, clearAfter: boolean = false) => {
+const flushBatch = async (userId: string, clearAfter: boolean = true) => {
   const queue = redisService.getQueue(userId);
   if (queue.length === 0) return { flushed: 0 };
 
   console.log(`Flush ${queue.length} events cho user: ${userId}`);
-
+  redisService.clearQueue(userId);
   await UserActivityModel.insertMany(queue);
 
   for (const event of queue) {
@@ -31,16 +31,19 @@ const flushBatch = async (userId: string, clearAfter: boolean = false) => {
     }
   }
 
-  await kafkaService.publishActivity({
-    userId,
-    events: queue,
-    totalEvents: queue.length,
-    timestamp: new Date(),
-  });
+  try {
+    await kafkaService.publishActivity({
+      userId,
+      events: queue,
+      totalEvents: queue.length,
+      timestamp: new Date(),
+    });
+  } catch (err) {
+    console.warn("⚠️ Kafka unavailable, skipping publish");
+  }
 
   const flushedCount = queue.length;
   if (clearAfter) redisService.clearQueue(userId);
-
   return { flushed: flushedCount };
 };
 

@@ -329,7 +329,7 @@ export const trackRecommendation = async (data: {
   events: {
     activity: string;
     productId?: string;
-    categoryId?: string;
+    type?: string;
     keyword?: string;
   }[];
 }) => {
@@ -347,7 +347,7 @@ export const trackRecommendation = async (data: {
   let lastPointNum: number = 0;
 
   for (const event of events) {
-    const { activity, productId, categoryId, keyword } = event;
+    let { activity, productId, type, keyword } = event;
 
     if (activity === "search" && keyword && keyword !== "") {
       const result = await findProduct(
@@ -365,8 +365,13 @@ export const trackRecommendation = async (data: {
       }
     }
 
-    if ((activity === "view" || activity === "click") && categoryId) {
-      const result = await getTopByType(2, lastPurchasesId, categoryId);
+    if (!type) {
+      const product = await Product.findById(productId);
+      type = product.type;
+    }
+
+    if ((activity === "view" || activity === "click") && type) {
+      const result = await getTopByType(2, lastPurchasesId, type);
 
       const lastItem = result.items[result.items.length - 1];
       if (lastItem) {

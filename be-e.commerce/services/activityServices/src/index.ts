@@ -3,6 +3,7 @@ import "dotenv/config";
 import { serve } from "@hono/node-server";
 import mongoose from "mongoose";
 import activityRoutes from "./routes/activity.routes";
+import { kafkaService } from "./services/kafka.service";
 
 const app = new Hono();
 

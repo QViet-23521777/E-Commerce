@@ -169,7 +169,8 @@ export const handleFindProduct = async (c: Context) => {
 export const handleTracking = async (c: Context) => {
   try {
     const body = await c.req.json();
-    const { userId, events } = body;
+    const { events } = body;
+    const userId = c.req.param("userId") || "";
     if (!userId) {
       return c.json({ success: false, message: "userId là bắt buộc" }, 400);
     }

@@ -21,9 +21,14 @@ export const addActivityController = async (c: Context) => {
 export const flushActivityController = async (c: Context) => {
   try {
     const userId = c.req.param("userId") || "";
+    console.log("Flush request cho userId:", userId);
+
     const result = await flushActivity(userId);
+    console.log("Flush result:", result);
+
     return c.json(result);
   } catch (error) {
+    console.error("Flush error:", error); // ← thêm dòng này để xem lỗi cụ thể
     return c.json({ success: false, message: "Lỗi khi flush activity" }, 500);
   }
 };
