@@ -286,7 +286,7 @@ const trackRecommendation = async (data) => {
     let lastPointId = "";
     let lastPointNum = 0;
     for (const event of events) {
-        const { activity, productId, categoryId, keyword } = event;
+        let { activity, productId, type, keyword } = event;
         if (activity === "search" && keyword && keyword !== "") {
             const result = await (0, exports.findProduct)(keyword.toString(), 2, lastFindTrack, lastFindId);
             const lastItem = result.items[result.items.length - 1];
@@ -296,8 +296,12 @@ const trackRecommendation = async (data) => {
                 listItems.push(...result.items);
             }
         }
-        if ((activity === "view" || activity === "click") && categoryId) {
-            const result = await (0, exports.getTopByType)(2, lastPurchasesId, categoryId);
+        if (!type) {
+            const product = await product_model_1.Product.findById(productId);
+            type = product.type;
+        }
+        if ((activity === "view" || activity === "click") && type) {
+            const result = await (0, exports.getTopByType)(2, lastPurchasesId, type);
             const lastItem = result.items[result.items.length - 1];
             if (lastItem) {
                 lastPurchasesId = lastItem._id.toString();

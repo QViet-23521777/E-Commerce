@@ -1,15 +1,58 @@
 import { UserActivityModel } from "../model/activity.model";
 import { redisService } from "./redis.service";
 import { kafkaService } from "./kafka.service";
+import { ActivityType, UserActivity } from "./redis.service";
 
-const flushBatch = async (userId: string, clearAfter: boolean = true) => {
+const INVENTORY_URL =
+  process.env.PRODUCT_SERVICE_URL || "http://localhost:3003";
+const RECOMMEND_COOLDOWN_MS = 60 * 1000;
+
+const lastRecommendCall = new Map<string, number>();
+
+const shouldCallRecommend = (userId: string): boolean => {
+  const last = lastRecommendCall.get(userId) ?? 0;
+  return Date.now() - last > RECOMMEND_COOLDOWN_MS;
+};
+
+const callRecommend = async (userId: string, events: UserActivity[]) => {
+  if (!shouldCallRecommend(userId)) return null;
+
+  const hasSignal = events.some(
+    (e) =>
+      e.activity === "view" || e.activity === "click" || e.activity === "buy",
+  );
+  if (!hasSignal) return null;
+
+  lastRecommendCall.set(userId, Date.now());
+
+  try {
+    const res = await fetch(
+      `${INVENTORY_URL}/api/products/recommend/${userId}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, events }),
+      },
+    );
+
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.warn("⚠️ Recommend service unavailable, skipping");
+    return null; // ✅ return null thay vì undefined
+  }
+};
+
+const flushBatch = async (userId: string) => {
   const queue = redisService.getQueue(userId);
   if (queue.length === 0) return { flushed: 0 };
 
-  console.log(`Flush ${queue.length} events cho user: ${userId}`);
+  const flushedCount = queue.length;
   redisService.clearQueue(userId);
-  await UserActivityModel.insertMany(queue);
 
+  await UserActivityModel.insertMany(
+    queue.map((event) => ({ ...event, userId })),
+  );
   for (const event of queue) {
     switch (event.activity) {
       case "view":
@@ -26,76 +69,98 @@ const flushBatch = async (userId: string, clearAfter: boolean = true) => {
         break;
       case "click":
         if (event.productId)
-          await redisService.addRecentView(userId, event.productId);
+          await redisService.addClick(userId, event.productId);
         break;
     }
   }
 
+  const recommendData = await callRecommend(userId, queue);
+  console.log("Recommend data:", recommendData);
   try {
     await kafkaService.publishActivity({
       userId,
       events: queue,
-      totalEvents: queue.length,
+      totalEvents: flushedCount,
       timestamp: new Date(),
     });
   } catch (err) {
     console.warn("⚠️ Kafka unavailable, skipping publish");
   }
 
-  const flushedCount = queue.length;
-  if (clearAfter) redisService.clearQueue(userId);
-  return { flushed: flushedCount };
+  return {
+    flushed: flushedCount,
+    recommendData,
+  };
 };
 
 export const addActivity = async (data: {
   userId: string;
-  activity: "view" | "search" | "click" | "buy";
+  activity: ActivityType;
   productId?: string;
   keyword?: string;
   categoryId?: string;
   metadata?: Record<string, unknown>;
 }) => {
-  const event = { ...data, timestamp: new Date() };
+  if (!data.activity) {
+    return {
+      queued: false,
+      message: "Thiếu field activity (view | buy | search | click)",
+      queueSize: 0,
+    };
+  }
+
   const queue = redisService.getQueue(data.userId);
 
   if (queue.length >= 20) {
     return {
       queued: false,
-      message: `Queue đã đầy 20 events, vui lòng flush trước`,
+      message: "Queue đã đầy 20 events, vui lòng flush trước",
       queueSize: queue.length,
     };
   }
+
+  const event: UserActivity = {
+    activity: data.activity,
+    productId: data.productId,
+    keyword: data.keyword,
+    timestamp: Date.now(),
+    count: 0,
+  };
+
   const shouldFlush = redisService.addToQueue(data.userId, event);
 
   if (shouldFlush) {
     const result = await flushBatch(data.userId);
     return {
       queued: true,
-      message: `Đủ 10 events → đã flush, queue vẫn giữ`,
+      message: "Đủ 10 events → đã flush",
       flushed: result.flushed,
       queueSize: redisService.getQueue(data.userId).length,
+      recommendData: result.recommendData,
     };
   }
 
   return {
     queued: true,
-    message: `Đã thêm vào queue`,
+    message: "Đã thêm vào queue",
     queueSize: redisService.getQueue(data.userId).length,
   };
 };
 
 export const flushActivity = async (userId: string) => {
-  const queueSize = redisService.getQueue(userId).length;
+  const queue = redisService.getQueue(userId);
 
-  if (queueSize === 0) {
+  if (queue.length === 0) {
     return { success: false, message: "Queue đang trống" };
   }
 
   const result = await flushBatch(userId);
+
   return {
     success: true,
     message: `Đã flush ${result.flushed} events`,
     flushed: result.flushed,
+    data: result.recommendData ?? null,
   };
 };
 
@@ -118,13 +183,14 @@ export const getActivityHistory = async (
 };
 
 export const getRecentActivities = async (userId: string) => {
-  const [recentViews, searchHistory, recentPurchases] = await Promise.all([
-    redisService.getRecentView(userId),
-    redisService.getSearchHistory(userId),
-    redisService.getRecentPurchase(userId),
+  const [views, searches, purchases, clicks] = await Promise.all([
+    redisService.getHistoryByActivity(userId, "view"),
+    redisService.getHistoryByActivity(userId, "search"),
+    redisService.getHistoryByActivity(userId, "buy"),
+    redisService.getHistoryByActivity(userId, "click"),
   ]);
 
-  return { recentViews, searchHistory, recentPurchases };
+  return { userId, views, searches, purchases, clicks };
 };
 
 export const clearActivity = async (userId: string) => {

@@ -34,7 +34,7 @@ router.get("/recommend", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/products/recommend`, "GET"),
 );
 
-router.get("/recommend/:userId", authenticate, (c) => {
+router.post("/recommend/:userId", authenticate, (c) => {
   const userId = c.req.param("userId");
   return Request(c, `${BASE}/api/products/recommend/${userId}`, "GET");
 });

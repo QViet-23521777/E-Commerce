@@ -12,6 +12,7 @@ const ACTIVITY_WEIGHT = {
 class KafkaConsumerService {
   private kafka: Kafka;
   private consumer: Consumer;
+  private connected = false;
 
   constructor() {
     this.kafka = new Kafka({
@@ -25,7 +26,9 @@ class KafkaConsumerService {
   }
 
   async connect(): Promise<void> {
+    if (this.connected) return;
     await this.consumer.connect();
+    this.connected = true;
     await this.consumer.subscribe({
       topic: config.kafkaTopic,
       fromBeginning: false,
@@ -50,7 +53,9 @@ class KafkaConsumerService {
   }
 
   async disconnect(): Promise<void> {
+    if (!this.connected) return;
     await this.consumer.disconnect();
+    this.connected = false;
   }
 }
 

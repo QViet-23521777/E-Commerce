@@ -11,6 +11,7 @@ const ACTIVITY_WEIGHT = {
 };
 class KafkaConsumerService {
     constructor() {
+        this.connected = false;
         this.kafka = new kafkajs_1.Kafka({
             clientId: "inventory-service",
             brokers: [config_1.config.kafkaBroker],
@@ -21,7 +22,10 @@ class KafkaConsumerService {
         });
     }
     async connect() {
+        if (this.connected)
+            return;
         await this.consumer.connect();
+        this.connected = true;
         await this.consumer.subscribe({
             topic: config_1.config.kafkaTopic,
             fromBeginning: false,
@@ -43,7 +47,10 @@ class KafkaConsumerService {
         console.log("✅ Kafka consumer connected");
     }
     async disconnect() {
+        if (!this.connected)
+            return;
         await this.consumer.disconnect();
+        this.connected = false;
     }
 }
 exports.kafkaConsumerService = new KafkaConsumerService();

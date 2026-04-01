@@ -1,9 +1,17 @@
 import { Kafka, Producer, logLevel } from "kafkajs";
 import { config } from "../config";
 
+interface ActivityPayload {
+  userId: string;
+  events: unknown[];
+  totalEvents: number;
+  timestamp: Date;
+}
+
 class KafkaService {
   private kafka: Kafka;
   private producer: Producer;
+  private connected = false;
 
   constructor() {
     this.kafka = new Kafka({
@@ -15,35 +23,23 @@ class KafkaService {
   }
 
   async connect(): Promise<void> {
+    if (this.connected) return;
     await this.producer.connect();
+    this.connected = true;
     console.log("✅ Kafka producer connected");
   }
 
-  async publishActivity(activity: object): Promise<void> {
-    try {
-      await this.producer.send({
-        topic: config.kafkaTopic,
-        messages: [
-          { key: (activity as any).userId, value: JSON.stringify(activity) },
-        ],
-      });
-    } catch (err: any) {
-      if (err.message?.includes("not connected")) {
-        await this.connect();
-        await this.producer.send({
-          topic: config.kafkaTopic,
-          messages: [
-            { key: (activity as any).userId, value: JSON.stringify(activity) },
-          ],
-        });
-      } else {
-        throw err;
-      }
-    }
+  async publishActivity(activity: ActivityPayload): Promise<void> {
+    if (!this.connected) await this.connect();
+    await this.producer.send({
+      topic: config.kafkaTopic,
+      messages: [{ key: activity.userId, value: JSON.stringify(activity) }],
+    });
   }
 
   async disconnect(): Promise<void> {
     await this.producer.disconnect();
+    this.connected = false;
   }
 }
 

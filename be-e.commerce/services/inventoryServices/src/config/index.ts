@@ -16,5 +16,5 @@ export const config = {
   redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
 
   kafkaBroker: process.env.KAFKA_BROKER || "localhost:9092",
-  kafkaTopic: process.env.KAFKA_TOPIC || "user-recommendation",
+  kafkaTopic: process.env.KAFKA_TOPIC || "user-events",
 };
