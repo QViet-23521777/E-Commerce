@@ -1,5 +1,5 @@
 import { Context, Next } from "hono";
-import { JwtUtils } from "../utils/jwtUtils";
+import { JwtUtils } from "../utils/jwtUtils.js";
 
 export const authenticate = async (c: Context, next: Next) => {
   try {

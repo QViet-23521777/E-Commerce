@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 export const connectDatabase = async () => {
   try {
     const mongoURI =
-      process.env.MONGO_URI || "mongodb://localhost:27017/ecommerce_users";
+      process.env.MONGODB_URI || "mongodb://localhost:27017/ecommerce_users";
 
     await mongoose.connect(mongoURI);
     console.log("Connected to MongoDB");

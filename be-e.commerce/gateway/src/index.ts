@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import "dotenv/config";
-import userRoutes from "./routes/user.routes";
-import productRoutes from "./routes/inventory.route";
+import userRoutes from "./routes/user.routes.js";
+import productRoutes from "./routes/inventory.route.js";
 const app = new Hono();
 
 app.use("*", cors());

@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import {
   authenticate,
   injectInternalSecret,
-} from "../middleware/authMiddleware";
-import { Request } from "../utils/proxy";
+} from "../middleware/authMiddleware.js";
+import { Request } from "../utils/proxy.js";
 
 const router = new Hono();
 const BASE = process.env.USER_SERVICE_URL;
