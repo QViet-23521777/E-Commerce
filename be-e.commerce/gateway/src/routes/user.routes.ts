@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import {
   authenticate,
   injectInternalSecret,
-} from "../middleware/authMiddleware.js";
-import { Request } from "../utils/proxy.js";
+} from "../middleware/authMiddleware";
+import { Request } from "../utils/proxy";
 
 const router = new Hono();
 const BASE = process.env.USER_SERVICE_URL;
@@ -18,14 +18,23 @@ router.post("/refresh-token", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/users/refresh-token`, "POST"),
 );
 router.get("/verify-email", injectInternalSecret, (c) =>
-  Request(c, `${BASE}/api/users/verify-email`, "GET"),
+  Request(
+    c,
+    `${BASE}/api/users/verify-email?token=${c.req.query("token")}`,
+    "GET",
+  ),
 );
 router.post("/send-reset-password-email", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/users/send-reset-password-email`, "POST"),
 );
-router.post("/verify-resetpassword", injectInternalSecret, (c) =>
-  Request(c, `${BASE}/api/users/verify-resetpassword`, "POST"),
-);
+router.post("/verify-resetpassword", injectInternalSecret, (c) => {
+  const token = c.req.query("token");
+  return Request(
+    c,
+    `${BASE}/api/users/verify-resetpassword?token=${token}`,
+    "POST",
+  );
+});
 router.post("/change-password", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/users/change-password`, "POST"),
 );

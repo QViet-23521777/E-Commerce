@@ -37,6 +37,7 @@ export class MailController {
   async handleResetPasswordEmail(
     @Payload() data: ResetPasswordEmailInterface,
   ): Promise<void> {
+    this.logger.log("data received:", JSON.stringify(data));
     this.logger.log(`Received reset password event for: ${data.email}`);
     await this.mailService.sendResetPasswordEmail(data);
   }

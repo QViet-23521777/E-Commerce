@@ -41,7 +41,7 @@ export const register = async (c: Context) => {
       password,
     });
 
-    const verifyUrl = `${process.env.APP_URL || "http://localhost:3001"}/api/users/verify-email?token=${Token!}`;
+    const verifyUrl = `${"http://localhost:3000"}/api/users/verify-email?token=${Token!}`;
     mailClient.sendVerifyEmail(user.email, user.name, verifyUrl);
 
     return c.json(
@@ -261,7 +261,10 @@ export const sendVerifyPasswordEmail = async (c: Context) => {
       new Date(Date.now() + 3600000).toISOString(),
     );
 
-    return c.json({ success: true, message: "Reset password email sent" }, 200);
+    return c.json(
+      { success: true, message: "Reset password email sent", token },
+      200,
+    );
   } catch (error) {
     return handleError(c, error);
   }
@@ -287,7 +290,7 @@ export const verifyingResetPassword = async (c: Context) => {
 
 export const changePassword = async (c: Context) => {
   try {
-    const { token, newPassword } = await c.req.json();
+    const { token, newPassword, oldPassword } = await c.req.json();
 
     if (!token)
       return c.json({ success: false, message: "Token is required" }, 400);
@@ -296,12 +299,17 @@ export const changePassword = async (c: Context) => {
         { success: false, message: "New password is required" },
         400,
       );
+    if (!oldPassword)
+      return c.json(
+        { success: false, message: "Old password is required" },
+        400,
+      );
 
     const user = await getUserByToken(token);
     if (!user)
       return c.json({ success: false, message: "User not found" }, 404);
 
-    await resetPassword(token, newPassword);
+    await resetPassword(token, newPassword, oldPassword);
 
     return c.json({ success: true, message: "Complete change password." }, 200);
   } catch (error) {

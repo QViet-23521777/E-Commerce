@@ -3,15 +3,17 @@ import { Hono } from "hono";
 import {
   authenticate,
   injectInternalSecret,
-} from "../middleware/authMiddleware.js";
-import { Request } from "../utils/proxy.js";
+} from "../middleware/authMiddleware";
+import { Request } from "../utils/proxy";
 
 const router = new Hono();
 const BASE = process.env.PRODUCT_SERVICE_URL;
 
-router.get("/search", injectInternalSecret, (c) =>
-  Request(c, `${BASE}/api/products/search`, "GET"),
-);
+router.get("/search", injectInternalSecret, (c) => {
+  const q = c.req.query("q");
+  const limit = c.req.query("limit");
+  return Request(c, `${BASE}/api/products/search?q=${q}&limit=${limit}`, "GET");
+});
 
 router.get("/top/purchases", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/products/top/purchases`, "GET"),
@@ -30,13 +32,13 @@ router.get("/top/type/:type", injectInternalSecret, (c) => {
   return Request(c, `${BASE}/api/products/top/type/${type}`, "GET");
 });
 
-router.get("/recommend", injectInternalSecret, (c) =>
-  Request(c, `${BASE}/api/products/recommend`, "GET"),
+router.post("/recommend", injectInternalSecret, (c) =>
+  Request(c, `${BASE}/api/products/recommend`, "POST"),
 );
 
 router.post("/recommend/:userId", authenticate, (c) => {
   const userId = c.req.param("userId");
-  return Request(c, `${BASE}/api/products/recommend/${userId}`, "GET");
+  return Request(c, `${BASE}/api/products/recommend/${userId}`, "POST");
 });
 
 router.post("/", authenticate, (c) =>

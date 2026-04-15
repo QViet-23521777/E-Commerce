@@ -9,7 +9,14 @@ export const Request = async (
 ) => {
   try {
     const isBodyMethod = ["POST", "PUT", "PATCH"].includes(method);
-    const body = isBodyMethod ? JSON.stringify(await c.req.json()) : undefined;
+
+    let body: string | undefined = undefined;
+
+    if (isBodyMethod) {
+      const cloned = c.req.raw.clone();
+      const text = await cloned.text();
+      body = text.trim() ? text : undefined;
+    }
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -24,7 +31,12 @@ export const Request = async (
     if (userEmail) headers["x-user-email"] = userEmail;
     if (userRole) headers["x-user-role"] = userRole;
 
-    const response = await fetch(url, { method, headers, body });
+    const response = await fetch(url, {
+      method,
+      headers,
+      body,
+    });
+
     const data = await response.json();
     return c.json(data, response.status as any);
   } catch (error: any) {

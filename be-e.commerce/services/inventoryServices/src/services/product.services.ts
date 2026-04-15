@@ -429,18 +429,16 @@ export const trackRecommendation = async (data: {
   };
 };
 
-export const trackingWithoutData = async () => {
+export const trackingWithoutData = async (
+  lastPurchasesId = "",
+  lastPurchasesNum = 0,
+  lastSaleId = "",
+  lastSaleNum = 0,
+  lastPointId = "",
+  lastPointNum = 0,
+) => {
   const listItems: PProduct[] = [];
 
-  let lastPurchasesId: string = "";
-  let lastPurchasesNum: number = 0;
-  let lastSaleId: string = "";
-  let lastSaleNum: number = 0;
-  let lastPointId: string = "";
-  let lastPointNum: number = 0;
-
-  const data = await Product.find({}).limit(5);
-  console.log(data.length);
   const resultPurchases = await getTopProductPurchases(
     2,
     lastPurchasesNum,

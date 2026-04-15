@@ -14,6 +14,9 @@ services:
     networks:
       - ecommerce-net
     restart: on-failure
+    volumes:
+      - ./gateway/src:/app/src
+    command: npm run dev
 
   # ========== MICROSERVICES ==========
   user-service:
@@ -27,6 +30,9 @@ services:
     networks:
       - ecommerce-net
     restart: on-failure
+    volumes:
+      - ./services/userServices/src:/app/src
+    command: npm run dev
 
   inventory-service:
     build: ./services/inventoryServices
@@ -41,6 +47,9 @@ services:
     networks:
       - ecommerce-net
     restart: on-failure
+    volumes:
+      - ./services/inventoryServices/src:/app/src
+    command: npx nodemon --watch src --ext ts --exec ts-node src/index.ts
 
   activity-service:
     build: ./services/activityServices
@@ -55,6 +64,9 @@ services:
     networks:
       - ecommerce-net
     restart: on-failure
+    volumes:
+      - ./services/activityServices/src:/app/src
+    command: npm run dev
 
   mail-service:
     build: ./services/mailServices
@@ -65,13 +77,16 @@ services:
     networks:
       - ecommerce-net
     restart: on-failure
+    volumes:
+      - ./services/mailServices/src:/app/src
+    command: npm run start:watch
 
   # ========== DATABASES & SERVICES ==========
   mongodb:
     image: mongo:7
     container_name: ecommerce-mongodb
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - mongo-data:/data/db
     networks:

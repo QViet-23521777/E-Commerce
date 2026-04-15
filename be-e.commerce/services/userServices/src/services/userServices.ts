@@ -187,11 +187,23 @@ export async function verifyResetPassword(token: string, otp: string) {
   await user.save();
 }
 
-export async function resetPassword(token: string, newPassword: string) {
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+  oldPassword: string,
+) {
   const user = await User.findOne({ Token: token });
   if (!user) throw new Error("INVALID_TOKEN");
   if (!user.TokenExpiredAt || user.TokenExpiredAt < new Date()) {
     throw new Error("TOKEN_EXPIRED");
+  }
+  if (!newPassword) throw new Error("NEW_PASSWORD_REQUIRED");
+  const newwpasswordHash = await argon2.hash(newPassword);
+  if (await argon2.verify(user.password, newPassword)) {
+    throw new Error("PASSWORD_SAME_AS_OLD");
+  }
+  if (!(await argon2.verify(user.password, oldPassword))) {
+    throw new Error("OLD_PASSWORD_INCORRECT");
   }
 
   user.password = await argon2.hash(newPassword);
