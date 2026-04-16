@@ -23,7 +23,10 @@ const callRecommend = async (userId: string, events: UserActivity[]) => {
   }
   const hasSignal = events.some(
     (e) =>
-      e.activity === "view" || e.activity === "click" || e.activity === "buy",
+      e.activity === "view" ||
+      e.activity === "click" ||
+      e.activity === "buy" ||
+      e.activity === "search",
   );
   if (!hasSignal) return null;
 
