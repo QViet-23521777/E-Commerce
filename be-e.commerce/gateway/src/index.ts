@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import "dotenv/config";
 import userRoutes from "./routes/user.routes";
 import productRoutes from "./routes/inventory.route";
+import paymentRoutes from "./routes/payment.route";
 const app = new Hono();
 
 app.use("*", cors());
@@ -12,6 +13,7 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.route("/api/users", userRoutes);
 app.route("/api/products", productRoutes);
+app.route("/api/payments", paymentRoutes);
 const port = Number(process.env.PORT) || 3000;
 
 serve({

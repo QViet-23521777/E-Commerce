@@ -18,6 +18,10 @@ export const authenticate = async (c: Context, next: Next) => {
     const token = authHeader.substring(7);
     const decoded = JwtUtils.verifyToken(token, process.env.JWT_SECRET!);
 
+    c.set("userId", decoded.userId);
+    c.set("userEmail", decoded.email);
+    c.set("userRole", decoded.role ?? "user");
+
     c.req.raw.headers.set("x-user-id", decoded.userId);
     c.req.raw.headers.set("x-user-email", decoded.email);
     c.req.raw.headers.set("x-user-role", decoded.role ?? "user");
