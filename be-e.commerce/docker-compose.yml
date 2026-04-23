@@ -49,7 +49,7 @@ services:
     restart: on-failure
     volumes:
       - ./services/inventoryServices/src:/app/src
-    command: npx nodemon --watch src --ext ts --exec ts-node src/index.ts
+    command: npm run dev
 
   activity-service:
     build: ./services/activityServices

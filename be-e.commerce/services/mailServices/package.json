@@ -6,7 +6,7 @@
     "dev": "ts-node src/main.ts",
     "start": "node dist/main.js",
     "start:dev": "ts-node src/main.ts",
-    "start:watch": "nodemon --exec ts-node src/main.ts"
+    "start:watch": "nodemon --legacy-watch --watch src --ext ts --exec ts-node src/main.ts"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.2",
