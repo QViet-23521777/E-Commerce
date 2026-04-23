@@ -22,6 +22,10 @@ export const authenticate = async (c: Context, next: Next) => {
     c.set("userEmail", decoded.email);
     c.set("userRole", decoded.role ?? "user");
 
+    c.set("userId", decoded.userId);
+    c.set("userEmail", decoded.email);
+    c.set("userRole", decoded.role ?? "user");
+
     c.req.raw.headers.set("x-internal-secret", process.env.INTERNAL_SECRET!);
 
     await next();

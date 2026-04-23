@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import "dotenv/config";
 import userRoutes from "./routes/user.routes";
 import productRoutes from "./routes/inventory.route";
+import paymentRoutes from "./routes/payment.route";
 import activityRoutes from "./routes/activity.route";
 const app = new Hono();
 
@@ -13,6 +14,7 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.route("/api/users", userRoutes);
 app.route("/api/products", productRoutes);
+app.route("/api/payments", paymentRoutes);
 app.route("/api/activities", activityRoutes);
 const port = Number(process.env.PORT) || 3000;
 

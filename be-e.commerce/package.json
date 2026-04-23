@@ -1,7 +1,7 @@
 {
   "name": "be",
   "scripts": {
-    "dev": "concurrently --names \"GATEWAY,USER,MAIL\" \"npm run dev --prefix gateway\" \"npm run dev --prefix services/userServices\" \"npm run dev --prefix services/mailServices\"  \"npm run dev --prefix services/inventoryServices\""
+    "dev": "concurrently --names \"GATEWAY,USER,MAIL,INVENTORY,PAYMENT\" \"npm run dev --prefix gateway\" \"npm run dev --prefix services/userServices\" \"npm run dev --prefix services/mailServices\" \"npm run dev --prefix services/inventoryServices\" \"npm run dev --prefix services/paymentServices\""
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
