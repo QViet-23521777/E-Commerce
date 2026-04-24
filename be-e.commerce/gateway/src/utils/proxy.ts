@@ -15,9 +15,7 @@ export const Request = async (
       const text = await cloned.text();
       body = text.trim() ? text : undefined;
     }
-    const query = new URL(c.req.url).search;
-    if (query) url += query;
-    const targetUrl = `${url}${query}`;
+    const targetUrl = url;
 
     const headers: Record<string, string> = {
       "x-internal-secret": process.env.INTERNAL_SECRET!,

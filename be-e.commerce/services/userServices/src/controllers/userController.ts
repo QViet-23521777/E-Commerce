@@ -14,8 +14,10 @@ import {
   resetPassword,
   getUserByToken,
   getUserByEmail,
+  SecondFactorAuth,
 } from "../services/userServices";
 import { mailClient } from "../utils/mailClient";
+import { access } from "fs";
 
 const HTTP_STATUS: Record<string, number> = {
   EMAIL_EXISTS: 400,
@@ -84,12 +86,42 @@ export const verifyEmail = async (c: Context) => {
 export const login = async (c: Context) => {
   try {
     const { email, password } = await c.req.json();
-    const { user, tokens } = await loginUser({ email, password });
-
+    const { user, otp } = await loginUser({ email, password });
+    console.log("Login thành công, chuẩn bị gửi email OTP...", user.name);
+    const otpEmailSent = await mailClient.sendLoginEmail(
+      user.email,
+      user.name,
+      otp,
+      new Date(Date.now() + 300000).toISOString(),
+    );
+    console.log("Email OTP đã được gửi:", otpEmailSent);
     return c.json(
       {
         success: true,
         message: "User logged in successfully",
+        data: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        },
+      },
+      200,
+    );
+  } catch (error) {
+    return handleError(c, error);
+  }
+};
+
+export const secondFactorAuth = async (c: Context) => {
+  try {
+    const { userId, otp } = await c.req.json();
+    const { user, tokens } = await SecondFactorAuth(userId, otp);
+    return c.json(
+      {
+        success: true,
+        message: "2FA authentication successful",
         data: {
           id: user._id,
           name: user.name,

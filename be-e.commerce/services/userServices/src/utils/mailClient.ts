@@ -25,4 +25,17 @@ export const mailClient = {
       otp,
       expiredAt,
     }),
+
+  sendLoginEmail: (
+    email: string,
+    name: string,
+    otp: string,
+    expiredAt: string,
+  ) =>
+    axios.post(`${MAIL_SERVICE_URL}/send_login_notification_email`, {
+      email,
+      name,
+      otp,
+      expiredAt,
+    }),
 };

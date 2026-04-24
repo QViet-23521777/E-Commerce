@@ -14,16 +14,20 @@ router.post("/register", injectInternalSecret, (c) =>
 router.post("/login", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/users/login`, "POST"),
 );
+router.post("/second-factor-auth", injectInternalSecret, (c) =>
+  Request(c, `${BASE}/api/users/second-factor-auth`, "POST"),
+);
+router.post("/second-factor-auth", injectInternalSecret, (c) =>
+  Request(c, `${BASE}/api/users/second-factor-auth`, "POST"),
+);
 router.post("/refresh-token", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/users/refresh-token`, "POST"),
 );
-router.get("/verify-email", injectInternalSecret, (c) =>
-  Request(
-    c,
-    `${BASE}/api/users/verify-email?token=${c.req.query("token")}`,
-    "GET",
-  ),
-);
+router.get("/verify-email", injectInternalSecret, (c) => {
+  const token = c.req.query("token");
+  const url = `${BASE}/api/users/verify-email?token=${token}`;
+  return Request(c, url, "GET");
+});
 router.post("/send-reset-password-email", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/users/send-reset-password-email`, "POST"),
 );

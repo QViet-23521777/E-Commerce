@@ -56,7 +56,21 @@ export async function loginUser({ email, password }: LoginInput) {
 
   const isPasswordValid = await argon2.verify(user.password, password);
   if (!isPasswordValid) throw new Error("INVALID_CREDENTIALS");
+  const otp = randomInt(100000, 1000000).toString();
+  user.otp = createHash("sha256").update(otp).digest("hex");
+  await user.save();
 
+  return { user, otp };
+}
+
+export async function SecondFactorAuth(userId: string, otp: string) {
+  const user = await User.findById(userId);
+  if (!user) throw new Error("USER_NOT_FOUND");
+  if (!otp) throw new Error("OTP_REQUIRED");
+  const hashedInput = createHash("sha256").update(otp).digest("hex");
+  if (hashedInput !== user.otp) {
+    throw new Error("INVALID_OTP");
+  }
   const tokens = JwtService.generateTokenPair({
     userId: user._id.toString(),
     email: user.email,
@@ -71,6 +85,7 @@ export async function loginUser({ email, password }: LoginInput) {
 
 export async function verifyUserEmail(token: string) {
   const user = await User.findOne({ Token: token });
+  console.log("Tìm user với token:", token, "Kết quả:", user);
   if (!user) throw new Error("INVALID_TOKEN");
   if (!user.TokenExpiredAt || user.TokenExpiredAt < new Date()) {
     throw new Error("TOKEN_EXPIRED");

@@ -5,6 +5,7 @@ import { MailService } from "./mail.service";
 import {
   VerifyEmailInterface,
   ResetPasswordEmailInterface,
+  LoginInterface,
 } from "./interfaces/mail.interface";
 
 @Controller()
@@ -40,5 +41,14 @@ export class MailController {
     this.logger.log("data received:", JSON.stringify(data));
     this.logger.log(`Received reset password event for: ${data.email}`);
     await this.mailService.sendResetPasswordEmail(data);
+  }
+
+  @Post("send_login_notification_email")
+  async handleLoginNotificationEmail(
+    @Payload() data: LoginInterface,
+  ): Promise<void> {
+    this.logger.log("data received:", JSON.stringify(data));
+    this.logger.log(`Received login notification event for: ${data.email}`);
+    await this.mailService.sendLoginNotificationEmail(data);
   }
 }
