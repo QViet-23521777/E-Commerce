@@ -5,6 +5,11 @@ import { connectDatabase } from "./config/database";
 import productRoutes from "./routes/product.route";
 import { config } from "./config";
 import { kafkaConsumerService } from "./services/kafkaConsumer.service";
+import {
+  checkRedisHealth,
+  checkDatabaseHealth,
+  checkKafkaHealth,
+} from "./controllers/health";
 
 const app = new Hono();
 
@@ -15,11 +20,23 @@ app.use("*", async (c, next) => {
 
 app.route("/api/products", productRoutes);
 
-app.get("/health", (c) => {
+app.get("/health", async (c) => {
+  const [isDatabaseHealthy, isRedisHealthy, isKafkaHealthy] = await Promise.all(
+    [checkDatabaseHealth(), checkRedisHealth(), checkKafkaHealth()],
+  );
+
+  const status =
+    isDatabaseHealthy && isRedisHealthy && isKafkaHealthy ? "ok" : "error";
+
   return c.json({
-    status: "ok",
-    service: "inventory-service",
+    service: "Activity Service",
+    status,
     timestamp: new Date().toISOString(),
+    checks: {
+      database: isDatabaseHealthy,
+      redis: isRedisHealthy,
+      kafka: isKafkaHealthy,
+    },
   });
 });
 

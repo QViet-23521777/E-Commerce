@@ -3,8 +3,11 @@ import "dotenv/config";
 import { serve } from "@hono/node-server";
 import mongoose from "mongoose";
 import activityRoutes from "./routes/activity.routes";
-import { kafkaService } from "./services/kafka.service";
-
+import {
+  checkDatabaseHealth,
+  checkRedisHealth,
+  checkKafkaHealth,
+} from "./controllers/health";
 const app = new Hono();
 
 app.use("*", async (c, next) => {
@@ -14,8 +17,24 @@ app.use("*", async (c, next) => {
 
 app.route("/api/activities", activityRoutes);
 
-app.get("/health", (c) => {
-  return c.json({ status: "ok", timestamp: new Date().toISOString() });
+app.get("/health", async (c) => {
+  const [isDatabaseHealthy, isRedisHealthy, isKafkaHealthy] = await Promise.all(
+    [checkDatabaseHealth(), checkRedisHealth(), checkKafkaHealth()],
+  );
+
+  const status =
+    isDatabaseHealthy && isRedisHealthy && isKafkaHealthy ? "ok" : "error";
+
+  return c.json({
+    service: "Activity Service",
+    status,
+    timestamp: new Date().toISOString(),
+    checks: {
+      database: isDatabaseHealthy,
+      redis: isRedisHealthy,
+      kafka: isKafkaHealthy,
+    },
+  });
 });
 
 const port = parseInt(process.env.PORT || "3004");

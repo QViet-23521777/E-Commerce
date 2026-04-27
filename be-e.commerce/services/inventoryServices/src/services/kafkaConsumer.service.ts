@@ -57,6 +57,19 @@ class KafkaConsumerService {
     await this.consumer.disconnect();
     this.connected = false;
   }
+
+  async ping(): Promise<string> {
+    try {
+      await this.consumer.subscribe({
+        topic: config.kafkaTopic,
+        fromBeginning: false,
+      });
+      return "PONG";
+    } catch (error) {
+      console.error("Kafka ping error:", error);
+      throw error;
+    }
+  }
 }
 
 export const kafkaConsumerService = new KafkaConsumerService();

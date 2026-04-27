@@ -5,7 +5,7 @@ const MAIL_SERVICE_URL =
 
 export const mailClient = {
   sendVerifyEmail: (email: string, name: string, verifyUrl: string) =>
-    axios.post(`${MAIL_SERVICE_URL}/verify-email`, {
+    axios.post(`${MAIL_SERVICE_URL}/test/verify-email`, {
       email,
       name,
       verifyUrl,
@@ -18,7 +18,7 @@ export const mailClient = {
     otp: string,
     expiredAt: string,
   ) =>
-    axios.post(`${MAIL_SERVICE_URL}/reset-password`, {
+    axios.post(`${MAIL_SERVICE_URL}/test/reset-password`, {
       email,
       name,
       token,
@@ -32,7 +32,7 @@ export const mailClient = {
     otp: string,
     expiredAt: string,
   ) =>
-    axios.post(`${MAIL_SERVICE_URL}/send_login_notification_email`, {
+    axios.post(`${MAIL_SERVICE_URL}/test/login-notification`, {
       email,
       name,
       otp,

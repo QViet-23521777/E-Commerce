@@ -41,6 +41,19 @@ class KafkaService {
     await this.producer.disconnect();
     this.connected = false;
   }
+
+  async ping(): Promise<string> {
+    try {
+      await this.producer.send({
+        topic: config.kafkaTopic,
+        messages: [{ key: "ping", value: "ping" }],
+      });
+      return "PONG";
+    } catch (error) {
+      console.error("Kafka ping error:", error);
+      throw error;
+    }
+  }
 }
 
 export const kafkaService = new KafkaService();

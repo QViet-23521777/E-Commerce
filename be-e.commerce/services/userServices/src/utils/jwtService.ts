@@ -52,4 +52,15 @@ export class JwtService {
       expiresIn: "1h",
     });
   }
+
+  static verifyAccessToken(token: string): JwtPayload {
+    try {
+      return jwt.verify(token, this.accessSecret) as JwtPayload;
+    } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        throw new Error("TOKEN_EXPIRED");
+      }
+      throw new Error("INVALID_TOKEN");
+    }
+  }
 }

@@ -108,4 +108,13 @@ export class MailService {
       };
     }
   }
+
+  async ping(): Promise<boolean> {
+    try {
+      await this.mailerService.verifyAllTransporters();
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

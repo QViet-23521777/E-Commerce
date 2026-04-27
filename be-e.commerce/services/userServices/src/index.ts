@@ -14,7 +14,11 @@ app.use("*", async (c, next) => {
 app.route("/api/users", userRoutes);
 
 app.get("/health", (c) => {
-  return c.json({ status: "ok", timestamp: new Date().toISOString() });
+  return c.json({
+    service: "User Service",
+    status: "ok",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 const port = parseInt(process.env.PORT || "3001");
