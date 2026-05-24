@@ -1,0 +1,49 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: userservice-mongodb-dev
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data_dev:/data/db
+    networks:
+      - userservice-network-dev
+
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: userservice-app-dev
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/userdb_dev?authSource=admin
+      JWT_SECRET: dev-secret-key
+      JWT_EXPIRES_IN: 1d
+    depends_on:
+      - mongodb
+    networks:
+      - userservice-network-dev
+    volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    command: npm run dev
+
+networks:
+  userservice-network-dev:
+    driver: bridge
+
+volumes:
+  mongodb_data_dev:
+    driver: local

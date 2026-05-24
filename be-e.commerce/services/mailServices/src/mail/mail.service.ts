@@ -1,0 +1,182 @@
+import { randomInt } from "crypto";
+import { Injectable, Logger } from "@nestjs/common";
+import { MailerService } from "@nestjs-modules/mailer";
+import { ConfigService } from "@nestjs/config";
+import {
+  VerifyEmailInterface,
+  ResetPasswordEmailInterface,
+  MailResultInterface,
+  LoginInterface,
+  SellerAcccountVerificationInterface,
+  AdminAccountVerificationInterface,
+} from "./interfaces/mail.interface";
+
+@Injectable()
+export class MailService {
+  private readonly logger = new Logger(MailService.name);
+
+  constructor(
+    private readonly mailerService: MailerService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  async sendVerificationEmail(
+    data: VerifyEmailInterface,
+  ): Promise<MailResultInterface> {
+    console.log("data received:", data);
+    try {
+      await this.mailerService.sendMail({
+        to: data.email,
+        subject: "Verify Your Account",
+        template: "./verify-email",
+        context: {
+          name: data.name,
+          verifyUrl: data.verifyUrl,
+        },
+      });
+
+      this.logger.log(
+        `Verification email sent to ${data.email} + " " + ${data.verifyUrl}`,
+      );
+      return { success: true, message: "Verification email sent successfully" };
+    } catch (error) {
+      this.logger.error(`Failed: ${(error as Error).message}`);
+      return { success: false, message: "Failed to send verification email" };
+    }
+  }
+
+  async sendResetPasswordEmail(
+    data: ResetPasswordEmailInterface,
+  ): Promise<MailResultInterface> {
+    try {
+      const expiredAt = new Date(data.expiredAt).toLocaleString();
+      const otp = data.otp;
+      await this.mailerService.sendMail({
+        to: data.email,
+        subject: "Reset Your Password",
+        template: "./reset-password",
+        context: {
+          name: data.name,
+          otp,
+          expiredAt,
+        },
+      });
+
+      this.logger.log(
+        `Reset password email sent to ${data.email}` +
+          " " +
+          otp +
+          " " +
+          expiredAt,
+      );
+      return {
+        success: true,
+        message: "Reset password email sent successfully",
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send reset password email to ${data.email}: ${(error as Error).message}`,
+      );
+      return { success: false, message: "Failed to send reset password email" };
+    }
+  }
+
+  async sendLoginNotificationEmail(
+    data: LoginInterface,
+  ): Promise<MailResultInterface> {
+    try {
+      console.log("data received:", data);
+      await this.mailerService.sendMail({
+        to: data.email,
+        subject: "New Login Notification",
+        template: "./login",
+        context: {
+          name: data.name,
+          otp: data.otp,
+          expiredAt: new Date(data.expiredAt).toLocaleString(),
+        },
+      });
+      return {
+        success: true,
+        message: "Login notification email sent successfully",
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send login notification email to ${data.email}: ${(error as Error).message}`,
+      );
+      return {
+        success: false,
+        message: "Failed to send login notification email",
+      };
+    }
+  }
+
+  async sendSellerAccountVerificationEmail(
+    data: SellerAcccountVerificationInterface,
+  ): Promise<MailResultInterface> {
+    try {
+      console.log("data received:", data);
+      await this.mailerService.sendMail({
+        to: data.email,
+        subject: "Seller Account Verification",
+        template: "./seller-account",
+        context: {
+          name: data.name,
+          otp: data.otp,
+          expiredAt: new Date(data.expiredAt).toLocaleString(),
+        },
+      });
+      return {
+        success: true,
+        message: "Seller account verification email sent successfully",
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send seller account verification email to ${data.email}: ${(error as Error).message}`,
+      );
+      return {
+        success: false,
+        message: "Failed to send seller account verification email",
+      };
+    }
+  }
+
+  async sendAdminAccountEmail(
+    data: AdminAccountVerificationInterface,
+  ): Promise<MailResultInterface> {
+    try {
+      console.log("data received:", data);
+      await this.mailerService.sendMail({
+        to: data.email,
+        subject: "Admin Account Notification",
+        template: "./admin-account",
+        context: {
+          name: data.email,
+          token: data.token,
+          expiredAt: new Date(data.expiredAt).toLocaleString(),
+        },
+      });
+      return {
+        success: true,
+        message: "Admin account email sent successfully",
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send admin account email to ${data.email}: ${(error as Error).message}`,
+      );
+      return {
+        success: false,
+        message: "Failed to send admin account email",
+      };
+    }
+  }
+
+  async ping(): Promise<boolean> {
+    try {
+      await this.mailerService.verifyAllTransporters();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}

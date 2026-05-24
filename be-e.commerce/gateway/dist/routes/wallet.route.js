@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const hono_1 = require("hono");
+const authMiddleware_1 = require("../middleware/authMiddleware");
+const proxy_1 = require("../utils/proxy");
+const router = new hono_1.Hono();
+const BASE = process.env.PAYMENT_SERVICE_URL;
+router.post("/", authMiddleware_1.authenticate, (c) => (0, proxy_1.Request)(c, `${BASE}/api/wallets`, "POST"));
+router.get("/", authMiddleware_1.authenticate, (c) => (0, proxy_1.Request)(c, `${BASE}/api/wallets`, "GET"));
+router.post("/credit", authMiddleware_1.authenticate, (c) => (0, proxy_1.Request)(c, `${BASE}/api/wallets/credit`, "POST"));
+exports.default = router;
