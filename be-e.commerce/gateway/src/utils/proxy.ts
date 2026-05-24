@@ -27,6 +27,14 @@ export const Request = async (
     const userId = c.req.header("x-user-id");
     const userEmail = c.req.header("x-user-email");
     const userRole = c.req.header("x-user-role");
+    const clientIP =
+      c.req.header("x-forwarded-for")?.split(",")[0].trim() ||
+      c.req.header("x-real-ip") ||
+      (c as any).env?.remoteAddr ||
+      c.req.raw.headers.get("x-forwarded-for") ||
+      "";
+
+    if (clientIP) headers["x-forwarded-for"] = clientIP;
 
     if (userId) headers["x-user-id"] = userId;
     if (userEmail) headers["x-user-email"] = userEmail;

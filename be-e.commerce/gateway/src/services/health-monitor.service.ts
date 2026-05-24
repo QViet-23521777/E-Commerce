@@ -14,9 +14,9 @@ const SERVICES = [
       "http://localhost:3002/health",
   },
   {
-    name: "goods-service",
+    name: "inventory-service",
     url:
-      `${process.env.PRODUCT_SERVICE_URL}/health` ||
+      `${process.env.INVENTORY_SERVICE_URL || process.env.PRODUCT_SERVICE_URL}/health` ||
       "http://localhost:3003/health",
   },
   {
@@ -39,7 +39,7 @@ const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
 
 const SERVICE_SEVERITY: Record<string, "critical" | "warning" | "info"> = {
   "user-service": "critical",
-  "goods-service": "critical",
+  "inventory-service": "critical",
   "mail-service": "info",
   "activity-service": "warning",
 };
@@ -111,7 +111,7 @@ async function sendSlackAlert(
 
   const impact: Record<string, string> = {
     "user-service": "Người dùng KHÔNG thể đăng nhập / đăng ký",
-    "goods-service": "Buyer KHÔNG thể xem / mua hàng",
+    "inventory-service": "Buyer KHÔNG thể xem / mua hàng",
     "mail-service": "Email OTP và thông báo bị gián đoạn",
     "activity-service": "Gợi ý sản phẩm tạm dừng — mua hàng vẫn OK",
   };

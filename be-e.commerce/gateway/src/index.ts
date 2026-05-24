@@ -1,28 +1,16 @@
-import { Hono } from "hono";
-import { cors } from "hono/cors";
+import path from "path";
+import dotenv from "dotenv";
 import { serve } from "@hono/node-server";
-import "dotenv/config";
-import userRoutes from "./routes/user.routes";
-import productRoutes from "./routes/inventory.route";
-import paymentRoutes from "./routes/payment.route";
-import activityRoutes from "./routes/activity.route";
 import {
   startHealthMonitor,
   stopHealthMonitor,
 } from "./services/health-monitor.service";
-import healthRoute from "./routes/health.route";
-const app = new Hono();
+import { createApp } from "./app";
 
-app.use("*", cors());
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-app.get("/health", (c) => c.json({ status: "ok" }));
-app.route("/admin/health", healthRoute);
-startHealthMonitor();
-
-app.route("/api/users", userRoutes);
-app.route("/api/products", productRoutes);
-app.route("/api/payments", paymentRoutes);
-app.route("/api/activities", activityRoutes);
+const app = createApp();
+//startHealthMonitor();
 const port = Number(process.env.PORT) || 3000;
 
 serve({

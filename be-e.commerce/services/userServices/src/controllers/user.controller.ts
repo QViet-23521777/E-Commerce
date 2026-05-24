@@ -17,7 +17,6 @@ import {
   SecondFactorAuth,
 } from "../services/userServices";
 import { mailClient } from "../utils/mailClient";
-import { access } from "fs";
 
 const HTTP_STATUS: Record<string, number> = {
   EMAIL_EXISTS: 400,
@@ -191,7 +190,6 @@ export const profile = async (c: Context) => {
           id: userData._id,
           name: userData.name,
           email: userData.email,
-          walletId: userData.walletId,
           createdAt: userData.createdAt,
           updatedAt: userData.updatedAt,
         },
@@ -215,7 +213,6 @@ export const getProfileById = async (c: Context) => {
           id: userData._id,
           name: userData.name,
           email: userData.email,
-          walletId: userData.walletId,
           createdAt: userData.createdAt,
           updatedAt: userData.updatedAt,
         },
@@ -244,7 +241,6 @@ export const updateProfile = async (c: Context) => {
           id: userData._id,
           name: userData.name,
           email: userData.email,
-          walletId: userData.walletId,
           createdAt: userData.createdAt,
           updatedAt: userData.updatedAt,
         },

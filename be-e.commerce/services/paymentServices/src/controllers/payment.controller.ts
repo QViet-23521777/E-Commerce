@@ -1,5 +1,6 @@
 import { Context } from "hono";
 import {
+  checkoutWithWallet,
   createMomoPaymentSession,
   getPaymentForUser,
   processMomoIpn,
@@ -15,16 +16,11 @@ export const createMomoPaymentController = async (c: Context) => {
       extraData?: string;
       lang?: string;
       items?: Array<{ productId: string; quantity: number }>;
+      walletId?: string;
     };
     const payment = await createMomoPaymentSession(user.id, body);
 
-    return c.json(
-      {
-        success: true,
-        data: payment,
-      },
-      201,
-    );
+    return c.json({ success: true, data: payment }, 201);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to create payment";
@@ -44,16 +40,35 @@ export const momoIpnController = async (c: Context) => {
   }
 };
 
+export const walletCheckoutController = async (c: Context) => {
+  try {
+    const user = c.get("user") as { id: string };
+    const body = c.get("validatedBody") as {
+      amount?: number;
+      orderInfo?: string;
+      items?: Array<{ productId: string; quantity: number }>;
+    };
+    const payment = await checkoutWithWallet(user.id, body);
+
+    return c.json({ success: true, data: payment }, 201);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to checkout";
+    const status = message === "Insufficient balance" ? 402 : 400;
+    return c.json({ success: false, message }, status);
+  }
+};
+
 export const getPaymentStatusController = async (c: Context) => {
   try {
     const user = c.get("user") as { id: string };
     const orderId = c.req.param("orderId");
+    if (!orderId) {
+      return c.json({ success: false, message: "orderId is required" }, 400);
+    }
     const payment = await getPaymentForUser(orderId, user.id);
 
-    return c.json({
-      success: true,
-      data: payment,
-    });
+    return c.json({ success: true, data: payment });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to get payment";

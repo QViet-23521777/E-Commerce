@@ -5,6 +5,7 @@ import {
   getMomoPartnerCode,
   verifyMomoIpnSignature,
 } from "./momo.service";
+import { creditWallet, debitWallet } from "./wallet.service";
 
 type CreatePaymentItemInput = {
   productId: string;
@@ -23,18 +24,53 @@ type CreatePaymentInput = {
 type ProductSnapshot = {
   _id: string;
   name: string;
-  price: number;
+  quantity: number;
+  productId: {
+    price: number;
+    name: string;
+  };
 };
 
 const PRODUCT_SERVICE_URL =
   process.env.PRODUCT_SERVICE_URL || "http://localhost:3003";
 
+const ACTIVITY_SERVICE_URL =
+  process.env.ACTIVITY_SERVICE_URL || "http://localhost:3004";
+
 const createOrderId = (): string => crypto.randomUUID();
 const createRequestId = (): string => crypto.randomUUID();
 
-const fetchProduct = async (productId: string): Promise<ProductSnapshot> => {
+const recordBuyActivities = async (
+  userId: string,
+  items: { productId: string; quantity: number }[],
+) => {
+  try {
+    await Promise.all(
+      items.map((item) =>
+        fetch(`${ACTIVITY_SERVICE_URL}/api/activities`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            activity: "buy",
+            productId: item.productId,
+          }),
+        }),
+      ),
+    );
+    console.log("[recordBuyActivities] recorded", {
+      userId,
+      count: items.length,
+    });
+  } catch (err) {
+    // Không throw — activity là non-critical
+    console.warn("[recordBuyActivities] failed, skipping", err);
+  }
+};
+
+const fetchInventory = async (productId: string): Promise<ProductSnapshot> => {
   const response = await fetch(
-    `${PRODUCT_SERVICE_URL.replace(/\/$/, "")}/api/products/${productId}`,
+    `${PRODUCT_SERVICE_URL.replace(/\/$/, "")}/api/inventory/${productId}`,
   );
 
   const data = (await response.json()) as {
@@ -43,6 +79,14 @@ const fetchProduct = async (productId: string): Promise<ProductSnapshot> => {
     message?: string;
   };
 
+  console.log("[fetchInventory]", {
+    status: response.status,
+    ok: response.ok,
+    success: data.success,
+    message: data.message,
+    hasData: !!data.data,
+  });
+
   if (!response.ok || !data.success || !data.data) {
     throw new Error(data.message || `Unable to fetch product ${productId}`);
   }
@@ -50,30 +94,100 @@ const fetchProduct = async (productId: string): Promise<ProductSnapshot> => {
   return data.data;
 };
 
+const buyInventoryByList = async (
+  items: { inventoryId: string; quantity: number }[],
+) => {
+  console.log(
+    "[buyInventoryByList] url:",
+    `${PRODUCT_SERVICE_URL}/api/inventory/buy/batch`,
+  );
+  console.log("[buyInventoryByList] items:", JSON.stringify(items, null, 2));
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(
+      `${PRODUCT_SERVICE_URL}/api/inventory/buy/batch`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+        signal: controller.signal,
+      },
+    );
+
+    const data = (await response.json()) as { message?: string };
+
+    console.log("[buyInventoryByList] response:", {
+      status: response.status,
+      ok: response.ok,
+      data,
+    });
+
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to buy inventory");
+    }
+
+    return data;
+  } catch (error) {
+    console.log("[buyInventoryByList] error:", error);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const restoreInventoryByList = async (
+  items: { inventoryId: string; quantity: number }[],
+) => {
+  const response = await fetch(
+    `${PRODUCT_SERVICE_URL}/api/inventory/restore/batch`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to restore inventory");
+  }
+
+  return response.json();
+};
+
 const resolveItemsAndAmount = async (payload: CreatePaymentInput) => {
+  console.log(
+    "[resolveItemsAndAmount] payload:",
+    JSON.stringify(payload, null, 2),
+  );
+
   if (!payload.items || payload.items.length === 0) {
     if (payload.amount === undefined) {
       throw new Error("amount is required when items are not provided");
     }
-
-    return {
-      amount: Number(payload.amount),
-      items: [],
-    };
+    return { amount: Number(payload.amount), items: [] };
   }
 
-  const products = await Promise.all(
-    payload.items.map((item) => fetchProduct(item.productId)),
+  const inventory = await Promise.all(
+    payload.items.map((item) => fetchInventory(item.productId)),
   );
 
   const items = payload.items.map((item, index) => {
-    const product = products[index];
-    const unitPrice = Number(product.price);
+    const goods = inventory[index];
+    const unitPrice = Number(goods.productId.price);
     const totalPrice = unitPrice * item.quantity;
 
+    console.log(`[resolveItemsAndAmount] item[${index}]`, {
+      goods,
+      unitPrice,
+      totalPrice,
+    });
+
     return {
-      productId: product._id,
-      name: product.name,
+      productId: goods._id,
+      name: goods.name,
       quantity: item.quantity,
       unitPrice,
       totalPrice,
@@ -81,6 +195,8 @@ const resolveItemsAndAmount = async (payload: CreatePaymentInput) => {
   });
 
   const amount = items.reduce((sum, item) => sum + item.totalPrice, 0);
+
+  console.log("[resolveItemsAndAmount] computed amount:", amount);
 
   if (payload.amount !== undefined && Number(payload.amount) !== amount) {
     throw new Error(
@@ -126,15 +242,22 @@ const normalizePaymentResponse = (payment: any) => ({
   failedAt: payment.failedAt,
 });
 
+// ==================== MOMO ====================
+
 export const createMomoPaymentSession = async (
   userId: string,
-  payload: CreatePaymentInput,
+  payload: CreatePaymentInput & { walletId?: string },
 ) => {
+  console.log("[createMomoPaymentSession] start", { userId, payload });
+
   const orderId = createOrderId();
   const requestId = createRequestId();
-  const orderInfo = payload.orderInfo?.trim() || "Thanh toan don hang MiniSupermarket";
+  const orderInfo =
+    payload.orderInfo?.trim() || "Thanh toan don hang MiniSupermarket";
   const redirectUrl =
-    payload.redirectUrl?.trim() || process.env.MOMO_REDIRECT_URL || "http://localhost:3001";
+    payload.redirectUrl?.trim() ||
+    process.env.MOMO_REDIRECT_URL ||
+    "http://localhost:3001";
   const ipnUrl =
     process.env.MOMO_IPN_URL || "http://localhost:3000/api/payments/momo/ipn";
   const lang = payload.lang || process.env.MOMO_LANG || "vi";
@@ -142,9 +265,13 @@ export const createMomoPaymentSession = async (
   const autoCapture = process.env.MOMO_AUTO_CAPTURE !== "false";
 
   const { amount, items } = await resolveItemsAndAmount(payload);
+  console.log("[createMomoPaymentSession] resolvedItems", { amount, items });
 
+  // Tạo payment record, chưa trừ tồn kho — sẽ trừ khi IPN confirm paid
+  console.log("[createMomoPaymentSession] creating payment record...");
   const payment = await PaymentModel.create({
     userId,
+    walletId: payload.walletId || null,
     partnerCode: getMomoPartnerCode(),
     requestId,
     orderId,
@@ -157,24 +284,47 @@ export const createMomoPaymentSession = async (
     extraData: "",
     items,
   });
+  console.log("[createMomoPaymentSession] payment record created", {
+    paymentId: payment._id,
+  });
 
-  const extraData = buildExtraData(payment._id.toString(), userId, payload.extraData);
-
+  const extraData = buildExtraData(
+    payment._id.toString(),
+    userId,
+    payload.extraData,
+  );
   payment.extraData = extraData;
 
   try {
-    const momoResponse = await createMomoPayment({
-      requestId,
-      orderId,
-      amount,
-      orderInfo,
-      redirectUrl,
-      ipnUrl,
-      extraData,
-      lang,
-      requestType,
-      autoCapture,
-    });
+    console.log("[createMomoPaymentSession] calling MoMo API...");
+
+    let momoResponse: Awaited<ReturnType<typeof createMomoPayment>>;
+
+    if (process.env.MOMO_MOCK === "true") {
+      console.log("[createMomoPaymentSession] MOCK mode");
+      momoResponse = {
+        resultCode: 0,
+        message: "Thành công",
+        payUrl: `https://test-payment.momo.vn/mock?orderId=${orderId}`,
+        deeplink: `momo://mock?orderId=${orderId}`,
+        qrCodeUrl: `https://test-payment.momo.vn/mock/qr?orderId=${orderId}`,
+      };
+    } else {
+      momoResponse = await createMomoPayment({
+        requestId,
+        orderId,
+        amount,
+        orderInfo,
+        redirectUrl,
+        ipnUrl,
+        extraData,
+        lang,
+        requestType,
+        autoCapture,
+      });
+    }
+
+    console.log("[createMomoPaymentSession] MoMo response", momoResponse);
 
     payment.createPayload = {
       requestId,
@@ -194,19 +344,31 @@ export const createMomoPaymentSession = async (
     payment.deeplink =
       typeof momoResponse.deeplink === "string" ? momoResponse.deeplink : null;
     payment.qrCodeUrl =
-      typeof momoResponse.qrCodeUrl === "string" ? momoResponse.qrCodeUrl : null;
+      typeof momoResponse.qrCodeUrl === "string"
+        ? momoResponse.qrCodeUrl
+        : null;
     payment.resultCode =
-      typeof momoResponse.resultCode === "number" ? momoResponse.resultCode : null;
+      typeof momoResponse.resultCode === "number"
+        ? momoResponse.resultCode
+        : null;
     payment.message =
       typeof momoResponse.message === "string" ? momoResponse.message : null;
 
     if (payment.resultCode !== null && payment.resultCode !== 0) {
+      console.log("[createMomoPaymentSession] MoMo rejected", {
+        resultCode: payment.resultCode,
+      });
       payment.status = "failed";
       payment.failedAt = new Date();
+    } else {
+      console.log("[createMomoPaymentSession] MoMo accepted, waiting for IPN", {
+        payUrl: payment.payUrl,
+      });
     }
 
     await payment.save();
   } catch (error) {
+    console.log("[createMomoPaymentSession] error", error);
     payment.status = "failed";
     payment.message =
       error instanceof Error ? error.message : "Failed to create MoMo payment";
@@ -244,13 +406,32 @@ export const processMomoIpn = async (payload: any) => {
   payment.resultCode = Number(payload.resultCode);
   payment.message = String(payload.message || "");
   payment.transId =
-    typeof payload.transId === "number" ? payload.transId : Number(payload.transId);
+    typeof payload.transId === "number"
+      ? payload.transId
+      : Number(payload.transId);
 
   if (payment.resultCode === 0) {
+    // Flow mua hàng trực tiếp → trừ tồn kho + ghi activity
+    if (payment.items.length > 0) {
+      await buyInventoryByList(
+        payment.items.map((item: { productId: string; quantity: number }) => ({
+          inventoryId: item.productId,
+          quantity: item.quantity,
+        })),
+      );
+      await recordBuyActivities(payment.userId, payment.items);
+    }
+
+    // Flow nạp ví → cộng số dư
+    if (payment.walletId && payment.items.length === 0) {
+      await creditWallet(payment.userId, payment.amount);
+    }
+
     payment.status = "paid";
     payment.paidAt = new Date();
     payment.failedAt = null;
   } else {
+    // Thất bại → không cần restore vì chưa trừ tồn kho
     payment.status = "failed";
     payment.failedAt = new Date();
   }
@@ -259,6 +440,73 @@ export const processMomoIpn = async (payload: any) => {
 
   return payment;
 };
+
+// ==================== WALLET CHECKOUT ====================
+
+export const checkoutWithWallet = async (
+  userId: string,
+  payload: CreatePaymentInput,
+) => {
+  console.log("[checkoutWithWallet] start", { userId, payload });
+
+  const orderId = createOrderId();
+  const orderInfo =
+    payload.orderInfo?.trim() || "Thanh toan don hang MiniSupermarket";
+
+  const { amount, items } = await resolveItemsAndAmount(payload);
+  console.log("[checkoutWithWallet] resolvedItems", { amount, items });
+
+  // Trừ ví trước — nếu không đủ tiền thì dừng ngay
+  console.log("[checkoutWithWallet] debiting wallet...");
+  await debitWallet(userId, amount);
+  console.log("[checkoutWithWallet] wallet debited");
+
+  // Trừ tồn kho
+  console.log("[checkoutWithWallet] buying inventory...");
+  try {
+    await buyInventoryByList(
+      items.map((item) => ({
+        inventoryId: item.productId,
+        quantity: item.quantity,
+      })),
+    );
+    console.log("[checkoutWithWallet] inventory bought");
+    await recordBuyActivities(userId, items);
+  } catch (error) {
+    // Tồn kho thất bại → hoàn tiền lại ví
+    console.log("[checkoutWithWallet] inventory failed, refunding wallet...");
+    await creditWallet(userId, amount);
+    throw error;
+  }
+
+  // Tạo payment record đã paid
+  const payment = await PaymentModel.create({
+    userId,
+    walletId: null,
+    partnerCode: "WALLET",
+    requestId: orderId,
+    orderId,
+    amount,
+    requestType: "wallet",
+    orderInfo,
+    status: "paid",
+    redirectUrl: "",
+    ipnUrl: "",
+    extraData: "",
+    items,
+    resultCode: 0,
+    message: "Thanh toán bằng ví thành công",
+    paidAt: new Date(),
+  });
+
+  console.log("[checkoutWithWallet] payment record created", {
+    paymentId: payment._id,
+  });
+
+  return normalizePaymentResponse(payment);
+};
+
+// ==================== COMMON ====================
 
 export const getPaymentForUser = async (orderId: string, userId: string) => {
   const payment = await PaymentModel.findOne({ orderId, userId });

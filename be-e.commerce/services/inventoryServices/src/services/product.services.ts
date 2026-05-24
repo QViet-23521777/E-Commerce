@@ -1,6 +1,8 @@
+import { moveMessagePortToContext } from "node:worker_threads";
 import cloudinary from "../config/cloudinary";
-import { Product, PProduct } from "../models/product.model";
+import { Product, PProduct, ProductSchema } from "../models/product.model";
 import { redisService } from "./redis.service";
+import { PipelineStage, Types } from "mongoose";
 const track: {
   price: number;
   sale: number;
@@ -44,7 +46,7 @@ export const createProduct = async (
     .toLowerCase();
 
   const product = await Product.create({
-    name,
+    normalize,
     description,
     price,
     imageUrl,
@@ -285,32 +287,52 @@ export const findProduct = async (
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
-  const items = await Product.find({
-    normalize: { $regex: normalizedFind, $options: "i" },
-  }).limit(limit);
+  const pipeline: PipelineStage[] = [
+    {
+      $match: {
+        normalize: { $regex: normalizedFind, $options: "i" },
+      },
+    },
+    {
+      $addFields: {
+        track: {
+          $add: [
+            { $multiply: ["$price", track.price] },
+            { $multiply: [{ $ifNull: ["$sale", 0] }, track.sale] },
+            {
+              $multiply: [
+                { $ifNull: ["$numPurchases", 0] },
+                track.numPurchases,
+              ],
+            },
+            { $multiply: ["$point", track.point] },
+          ],
+        },
+      },
+    },
+    {
+      $sort: { track: -1, _id: 1 },
+    },
+  ];
 
-  for (const item of items) {
-    item.track =
-      item.price * track.price +
-      (item.sale ?? 0) * track.sale +
-      (item.numPurchases ?? 0) * track.numPurchases +
-      item.point * track.point;
+  if (lastTrack !== undefined && lastId) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { track: { $lt: lastTrack } },
+          { track: lastTrack, _id: { $gt: new Types.ObjectId(lastId) } },
+        ],
+      },
+    });
   }
 
-  const filtered =
-    lastTrack !== undefined && lastId
-      ? items.filter(
-          (item) =>
-            (item.track ?? 0) < lastTrack ||
-            ((item.track ?? 0) === lastTrack && item._id.toString() > lastId),
-        )
-      : items;
+  pipeline.push({ $limit: limit });
 
-  filtered.sort((a, b) => (b.track ?? 0) - (a.track ?? 0));
+  const items = await Product.aggregate(pipeline);
 
-  const lastItem = filtered[filtered.length - 1];
+  const lastItem = items[items.length - 1];
   return {
-    items: filtered,
+    items,
     nextCursor: lastItem
       ? { lastTrack: lastItem.track, lastId: lastItem._id }
       : null,

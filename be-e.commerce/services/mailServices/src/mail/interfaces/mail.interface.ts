@@ -30,3 +30,16 @@ export interface LoginInterface {
   otp: string;
   expiredAt: string;
 }
+
+export interface SellerAcccountVerificationInterface {
+  name: string;
+  email: string;
+  otp: string;
+  expiredAt: string;
+}
+
+export interface AdminAccountVerificationInterface {
+  email: string;
+  token: string;
+  expiredAt: string;
+}

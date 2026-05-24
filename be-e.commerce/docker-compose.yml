@@ -10,6 +10,7 @@ services:
       - user-service
       - inventory-service
       - activity-service
+      - payment-service
       - mail-service
     networks:
       - ecommerce-net
@@ -66,6 +67,22 @@ services:
     restart: on-failure
     volumes:
       - ./services/activityServices/src:/app/src
+    command: npm run dev
+
+  payment-service:
+    build: ./services/paymentServices
+    image: paymentservices:latest
+    container_name: ecommerce-payment-service
+    ports:
+      - "3005:3005"
+    env_file: ./services/paymentServices/.env.docker
+    depends_on:
+      - mongodb
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/paymentServices/src:/app/src
     command: npm run dev
 
   mail-service:

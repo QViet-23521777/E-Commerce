@@ -16,6 +16,10 @@ router.post("/momo/ipn", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/payments/momo/ipn`, "POST"),
 );
 
+router.post("/wallet/checkout", authenticate, (c) =>
+  Request(c, `${BASE}/api/payments/wallet/checkout`, "POST"),
+);
+
 router.get("/:orderId", authenticate, (c) => {
   const orderId = c.req.param("orderId");
   return Request(c, `${BASE}/api/payments/${orderId}`, "GET");

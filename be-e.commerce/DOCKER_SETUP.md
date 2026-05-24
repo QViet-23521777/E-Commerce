@@ -122,6 +122,7 @@ Các `.env.docker` files đã được cấu hình cho Docker:
 - `services/userServices/.env.docker`
 - `services/inventoryServices/.env.docker`
 - `services/activityServices/.env.docker`
+- `services/paymentServices/.env.docker`
 - `services/mailServices/.env.docker`
 
 Để sửa đổi, edit các files này trước khi chạy `docker-compose up`.

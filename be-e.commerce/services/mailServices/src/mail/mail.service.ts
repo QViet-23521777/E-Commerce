@@ -7,6 +7,8 @@ import {
   ResetPasswordEmailInterface,
   MailResultInterface,
   LoginInterface,
+  SellerAcccountVerificationInterface,
+  AdminAccountVerificationInterface,
 } from "./interfaces/mail.interface";
 
 @Injectable()
@@ -105,6 +107,66 @@ export class MailService {
       return {
         success: false,
         message: "Failed to send login notification email",
+      };
+    }
+  }
+
+  async sendSellerAccountVerificationEmail(
+    data: SellerAcccountVerificationInterface,
+  ): Promise<MailResultInterface> {
+    try {
+      console.log("data received:", data);
+      await this.mailerService.sendMail({
+        to: data.email,
+        subject: "Seller Account Verification",
+        template: "./seller-account",
+        context: {
+          name: data.name,
+          otp: data.otp,
+          expiredAt: new Date(data.expiredAt).toLocaleString(),
+        },
+      });
+      return {
+        success: true,
+        message: "Seller account verification email sent successfully",
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send seller account verification email to ${data.email}: ${(error as Error).message}`,
+      );
+      return {
+        success: false,
+        message: "Failed to send seller account verification email",
+      };
+    }
+  }
+
+  async sendAdminAccountEmail(
+    data: AdminAccountVerificationInterface,
+  ): Promise<MailResultInterface> {
+    try {
+      console.log("data received:", data);
+      await this.mailerService.sendMail({
+        to: data.email,
+        subject: "Admin Account Notification",
+        template: "./admin-account",
+        context: {
+          name: data.email,
+          token: data.token,
+          expiredAt: new Date(data.expiredAt).toLocaleString(),
+        },
+      });
+      return {
+        success: true,
+        message: "Admin account email sent successfully",
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to send admin account email to ${data.email}: ${(error as Error).message}`,
+      );
+      return {
+        success: false,
+        message: "Failed to send admin account email",
       };
     }
   }

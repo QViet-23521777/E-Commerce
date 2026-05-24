@@ -12,7 +12,7 @@ import {
   changePassword,
   verifyingResetPassword,
   secondFactorAuth,
-} from "../controllers/userController";
+} from "../controllers/user.controller";
 import { Hono } from "hono";
 import { validateRegister, validateLogin } from "../middleware/validateRequest";
 import { internalAuth } from "../middleware/internalAuth";

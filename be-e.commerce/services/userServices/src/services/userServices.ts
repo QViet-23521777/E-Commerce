@@ -3,6 +3,8 @@ import argon2 from "argon2";
 import crypto from "crypto";
 import { randomInt, createHash } from "crypto";
 import { JwtService } from "../utils/jwtService";
+import { UserProfile } from "../models/userProfile.Model";
+import { Role } from "../models/role.Model";
 
 export interface RegisterInput {
   name: string;
@@ -20,36 +22,38 @@ export interface UpdateProfileInput {
   walletId?: string;
 }
 
-export async function registerUser({ name, email, password }: RegisterInput) {
+export const registerUser = async ({
+  name,
+  email,
+  password,
+}: RegisterInput) => {
   const existingUser = await User.findOne({ email });
   if (existingUser) throw new Error("EMAIL_EXISTS");
 
   const hashedPassword = await argon2.hash(password);
   const Token = crypto.randomBytes(32).toString("hex");
   const TokenExpiredAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
+  const RoleId = await Role.findOne({ name: "user" }).then((role) => role!._id);
   const newUser = new User({
     name,
     email,
     password: hashedPassword,
     Token,
     TokenExpiredAt,
+    roleId: RoleId,
   });
   await newUser.save();
-
   const tokens = JwtService.generateTokenPair({
     userId: newUser._id.toString(),
     email: newUser.email,
     role: "user",
   });
-
   newUser.refreshToken = tokens.refreshToken;
   await newUser.save();
-
   return { user: newUser, tokens, Token };
-}
+};
 
-export async function loginUser({ email, password }: LoginInput) {
+export const loginUser = async ({ email, password }: LoginInput) => {
   const user = await User.findOne({ email });
   if (!user) throw new Error("INVALID_CREDENTIALS");
   if (!user.isVerified) throw new Error("EMAIL_NOT_VERIFIED");
@@ -61,9 +65,9 @@ export async function loginUser({ email, password }: LoginInput) {
   await user.save();
 
   return { user, otp };
-}
+};
 
-export async function SecondFactorAuth(userId: string, otp: string) {
+export const SecondFactorAuth = async (userId: string, otp: string) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("USER_NOT_FOUND");
   if (!otp) throw new Error("OTP_REQUIRED");
@@ -81,11 +85,10 @@ export async function SecondFactorAuth(userId: string, otp: string) {
   await user.save();
 
   return { user, tokens };
-}
+};
 
-export async function verifyUserEmail(token: string) {
+export const verifyUserEmail = async (token: string) => {
   const user = await User.findOne({ Token: token });
-  console.log("Tìm user với token:", token, "Kết quả:", user);
   if (!user) throw new Error("INVALID_TOKEN");
   if (!user.TokenExpiredAt || user.TokenExpiredAt < new Date()) {
     throw new Error("TOKEN_EXPIRED");
@@ -95,9 +98,19 @@ export async function verifyUserEmail(token: string) {
   user.Token = undefined;
   user.TokenExpiredAt = undefined;
   await user.save();
-}
 
-export async function refreshUserToken(refreshToken: string) {
+  // Tự tạo profile sau khi verify
+  const existingProfile = await UserProfile.findOne({ userId: user._id });
+  if (!existingProfile) {
+    await UserProfile.create({
+      userId: user._id,
+      preferences: [],
+      searchHistory: [],
+    });
+  }
+};
+
+export const refreshUserToken = async (refreshToken: string) => {
   const decoded = JwtService.verifyRefreshToken(refreshToken);
 
   const user = await User.findById(decoded.userId);
@@ -112,61 +125,67 @@ export async function refreshUserToken(refreshToken: string) {
   });
 
   return { accessToken };
-}
+};
 
-export async function logoutUser(userId: string) {
+export const logoutUser = async (userId: string) => {
   const user = await User.findById(userId);
   if (user) {
     user.refreshToken = undefined;
     await user.save();
   }
-}
+};
 
-export async function getUserProfile(userId: string) {
+export const getUserProfile = async (userId: string) => {
   const user = await User.findById(userId).select("-password -refreshToken");
   if (!user) throw new Error("USER_NOT_FOUND");
   return user;
-}
+};
 
-export async function getUserProfileById(id: string) {
+export const getUserProfileById = async (id: string) => {
   const user = await User.findById(id).select("-password -refreshToken");
   if (!user) throw new Error("USER_NOT_FOUND");
   return user;
-}
+};
 
-export async function getUserByEmail(email: string) {
+export const getUserByEmail = async (email: string) => {
   const user = await User.findOne({ email }).select("-password -refreshToken");
   if (!user) throw new Error("USER_NOT_FOUND");
   return user;
-}
+};
 
-export async function getUserByToken(token: string) {
+export const getUserByToken = async (token: string) => {
   const user = await User.findOne({ Token: token }).select(
     "-password -refreshToken",
   );
   if (!user) throw new Error("USER_NOT_FOUND");
   return user;
-}
+};
 
-export async function updateUserProfile(
+export const updateUserProfile = async (
   userId: string,
   { name, walletId }: UpdateProfileInput,
-) {
+) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("USER_NOT_FOUND");
 
   if (name) user.name = name;
-  if (walletId) user.walletId = walletId;
+
+  // Sửa bug — cập nhật walletId đúng cách
+  const userProfile = await UserProfile.findOne({ userId: user._id });
+  if (walletId && userProfile) {
+    userProfile.walletId = walletId;
+    await userProfile.save();
+  }
+
   await user.save();
-
   return user;
-}
+};
 
-export async function deleteUserAccount(userId: string) {
+export const deleteUserAccount = async (userId: string) => {
   await User.findByIdAndDelete(userId);
-}
+};
 
-export async function setRessetPasswordToken(email: string) {
+export const setRessetPasswordToken = async (email: string) => {
   const user = await User.findOne({ email });
   if (!user) throw new Error("USER_NOT_FOUND");
 
@@ -184,9 +203,9 @@ export async function setRessetPasswordToken(email: string) {
   await user.save();
 
   return { token, otp };
-}
+};
 
-export async function verifyResetPassword(token: string, otp: string) {
+export const verifyResetPassword = async (token: string, otp: string) => {
   const user = await User.findOne({ Token: token });
   if (!user) throw new Error("INVALID_TOKEN");
   if (!user.TokenExpiredAt || user.TokenExpiredAt < new Date()) {
@@ -200,20 +219,19 @@ export async function verifyResetPassword(token: string, otp: string) {
 
   user.otp = undefined;
   await user.save();
-}
+};
 
-export async function resetPassword(
+export const resetPassword = async (
   token: string,
   newPassword: string,
   oldPassword: string,
-) {
+) => {
   const user = await User.findOne({ Token: token });
   if (!user) throw new Error("INVALID_TOKEN");
   if (!user.TokenExpiredAt || user.TokenExpiredAt < new Date()) {
     throw new Error("TOKEN_EXPIRED");
   }
   if (!newPassword) throw new Error("NEW_PASSWORD_REQUIRED");
-  const newwpasswordHash = await argon2.hash(newPassword);
   if (await argon2.verify(user.password, newPassword)) {
     throw new Error("PASSWORD_SAME_AS_OLD");
   }
@@ -225,4 +243,4 @@ export async function resetPassword(
   user.Token = undefined;
   user.TokenExpiredAt = undefined;
   await user.save();
-}
+};

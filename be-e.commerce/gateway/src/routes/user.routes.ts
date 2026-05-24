@@ -17,9 +17,6 @@ router.post("/login", injectInternalSecret, (c) =>
 router.post("/second-factor-auth", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/users/second-factor-auth`, "POST"),
 );
-router.post("/second-factor-auth", injectInternalSecret, (c) =>
-  Request(c, `${BASE}/api/users/second-factor-auth`, "POST"),
-);
 router.post("/refresh-token", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/users/refresh-token`, "POST"),
 );

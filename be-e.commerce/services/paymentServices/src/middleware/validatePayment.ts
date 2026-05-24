@@ -64,3 +64,21 @@ export const validateCreateMomoPayment = async (c: Context, next: Next) => {
   c.set("validatedBody", body);
   await next();
 };
+
+export const validateCreditWallet = async (c: Context, next: Next) => {
+  const body = await c.req.json().catch(() => ({}));
+  const errors: string[] = [];
+
+  if (body.amount === undefined) {
+    errors.push("amount is required");
+  } else if (!Number.isFinite(body.amount) || Number(body.amount) <= 0) {
+    errors.push("amount must be a positive number");
+  }
+
+  if (errors.length > 0) {
+    return c.json({ success: false, errors }, 400);
+  }
+
+  c.set("validatedBody", body);
+  await next();
+};

@@ -3,6 +3,7 @@ import {
   createMomoPaymentController,
   getPaymentStatusController,
   momoIpnController,
+  walletCheckoutController,
 } from "../controllers/payment.controller";
 import { extractUser } from "../middleware/extractUser";
 import { internalAuth } from "../middleware/internalAuth";
@@ -18,6 +19,20 @@ paymentRoutes.post(
   createMomoPaymentController,
 );
 paymentRoutes.post("/momo/ipn", internalAuth, momoIpnController);
-paymentRoutes.get("/:orderId", internalAuth, extractUser, getPaymentStatusController);
+
+paymentRoutes.post(
+  "/wallet/checkout",
+  internalAuth,
+  extractUser,
+  validateCreateMomoPayment, // dùng lại validator vì cùng input shape
+  walletCheckoutController,
+);
+
+paymentRoutes.get(
+  "/:orderId",
+  internalAuth,
+  extractUser,
+  getPaymentStatusController,
+);
 
 export default paymentRoutes;

@@ -16,8 +16,10 @@ import {
   handleTracking,
   handleTrackingWithoutData,
 } from "../controllers/product.controller";
+import { sanitizeRequestBody } from "../middleware/sanitize";
 
 const router = new Hono();
+router.use("*", sanitizeRequestBody);
 
 router.post("/", validateCreateProduct, handleCreateProduct);
 

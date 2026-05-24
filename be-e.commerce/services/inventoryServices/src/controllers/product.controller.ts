@@ -208,7 +208,7 @@ export const handleTracking = async (c: Context) => {
     const result = await trackRecommendation({ userId, events });
     return c.json({ success: true, ...result });
   } catch (error) {
-    return c.json({ success: false, message: "Internal server error" }, 500); //fix ở đây
+    return c.json({ success: false, message: "Internal server error" }, 500);
   }
 };
 

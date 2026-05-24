@@ -9,7 +9,7 @@ export interface JwtPayload {
 export class JwtService {
   private static readonly accessSecret = process.env.JWT_SECRET!;
   private static readonly refreshSecret = process.env.JWT_REFRESH_SECRET!;
-  private static readonly accessExpiresIn = process.env.JWT_EXPIRES_IN || "15m";
+  private static readonly accessExpiresIn = process.env.JWT_EXPIRES_IN || "1d";
   private static readonly refreshExpiresIn =
     process.env.JWT_REFRESH_EXPIRES_IN || "7d";
 

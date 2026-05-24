@@ -15,7 +15,7 @@ export interface PProduct extends Document {
   track?: number;
 }
 
-const InventorySchema = new Schema(
+export const ProductSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
     normalize: { type: String, required: true },
@@ -39,4 +39,4 @@ const InventorySchema = new Schema(
 
 export const Product =
   mongoose.models.Product ||
-  mongoose.model<PProduct>("Product", InventorySchema, "product");
+  mongoose.model<PProduct>("Product", ProductSchema, "product");

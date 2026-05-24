@@ -13,6 +13,7 @@ import {
   VerifyEmailInterface,
   ResetPasswordEmailInterface,
   LoginInterface,
+  SellerAcccountVerificationInterface,
 } from "./interfaces/mail.interface";
 import { MailHealthService } from "./mail.health";
 
@@ -68,6 +69,34 @@ export class MailController {
   async handleLoginNotificationEmail(@Payload() data: LoginInterface) {
     this.logger.log(`[EVENT] login notification: ${data.email}`);
     await this.mailService.sendLoginNotificationEmail(data);
+  }
+
+  @Post("test/seller-account-verification")
+  async testSellerAccountVerification(
+    @Body() data: SellerAcccountVerificationInterface,
+  ) {
+    this.logger.log(`[TEST] seller account verification: ${data.email}`);
+    return this.mailService.sendSellerAccountVerificationEmail(data);
+  }
+
+  @EventPattern("send_seller_account_verification_email")
+  async handleSellerAccountVerificationEmail(
+    @Payload() data: SellerAcccountVerificationInterface,
+  ) {
+    this.logger.log(`[EVENT] seller account verification: ${data.email}`);
+    await this.mailService.sendSellerAccountVerificationEmail(data);
+  }
+
+  @Post("test/send-admin-mail")
+  async testSendAdminMail(@Body() data: any) {
+    this.logger.log(`[TEST] send admin mail: ${data.email}`);
+    return this.mailService.sendAdminAccountEmail(data);
+  }
+
+  @EventPattern("send_admin_account_email")
+  async handleAdminAccountEmail(@Payload() data: any) {
+    this.logger.log(`[EVENT] send admin mail: ${data.email}`);
+    await this.mailService.sendAdminAccountEmail(data);
   }
 
   // ─── HEALTH ───────────────────────────────────────────────
