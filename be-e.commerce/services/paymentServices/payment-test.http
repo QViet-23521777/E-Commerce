@@ -1,0 +1,135 @@
+# MoMo Payment Service — VS Code REST Client tests
+# Install "REST Client" extension (by Huachao Mao), then click "Send Request" above each block.
+#
+# How to use:
+#   1. Copy .env.example → .env and fill in your INTERNAL_SECRET
+#   2. Start the service: npm run dev
+#   3. Update @secret below to match your INTERNAL_SECRET
+#   4. After creating a payment, copy the returned orderId into @orderId
+
+@base      = http://localhost:3005/api/payments
+@secret    = test-secret-123
+@userId    = user-001
+@userEmail = test@example.com
+@orderId   = REPLACE_WITH_ORDER_ID_FROM_CREATE_RESPONSE
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 1. Health check (no auth needed)
+GET http://localhost:3005/health
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 2. Get available payment methods
+GET {{base}}/methods
+x-internal-secret: {{secret}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 3. Create payment — fixed amount (MoMo wallet)
+# Returns payUrl — open it in a browser to complete the sandbox payment.
+POST {{base}}/momo/create
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}
+x-user-email: {{userEmail}}
+Content-Type: application/json
+
+{
+  "amount": 50000,
+  "orderInfo": "Test order - MoMo wallet",
+  "paymentMethod": "wallet"
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 4. Create payment — fixed amount (ATM card, minimum 10000 VND)
+POST {{base}}/momo/create
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}
+x-user-email: {{userEmail}}
+Content-Type: application/json
+
+{
+  "amount": 20000,
+  "orderInfo": "Test order - ATM",
+  "paymentMethod": "atm"
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 5. Create payment — MoMo hosted (lets user pick method on MoMo's page)
+POST {{base}}/momo/create
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}
+x-user-email: {{userEmail}}
+Content-Type: application/json
+
+{
+  "amount": 100000,
+  "orderInfo": "Test order - hosted methods",
+  "paymentMethod": "momo_methods"
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 6. Get payment status by orderId
+# Replace @orderId at the top of this file first.
+GET {{base}}/{{orderId}}
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 7. Sync payment status from MoMo
+# Use this if the payment status is still "pending" after completing payment
+# and you don't have ngrok set up for IPN callbacks.
+POST {{base}}/{{orderId}}/sync
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 8. Refund full amount
+# Only works if payment status is "paid". Run step 7 first if status is still pending.
+POST {{base}}/{{orderId}}/refund
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}
+Content-Type: application/json
+
+{
+  "description": "Test refund - full amount"
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 9. Partial refund
+POST {{base}}/{{orderId}}/refund
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}
+Content-Type: application/json
+
+{
+  "amount": 10000,
+  "description": "Test refund - partial"
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 10. Payment history (all payments for this user)
+GET {{base}}/history
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 11. Payment history — filter by status
+GET {{base}}/history?status=paid&page=1&limit=10
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+### 12. Payment history — filter by method
+GET {{base}}/history?paymentMethod=wallet
+x-internal-secret: {{secret}}
+x-user-id: {{userId}}

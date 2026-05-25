@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "rimraf dist && tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "node --require ts-node/register --test src/tests/payment.test.ts"
   },
   "keywords": [],
   "author": "",

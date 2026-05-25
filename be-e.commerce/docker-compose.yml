@@ -8,6 +8,7 @@ services:
       - userServices
       - inventoryServices
       - mailServices
+      - paymentServices
       - promotionServices
 
   userServices:
@@ -27,6 +28,12 @@ services:
     ports:
       - "3003:3003"
     env_file: ./services/inventoryServices/.env
+
+  paymentServices:
+    build: ./services/paymentServices
+    ports:
+      - "3005:3005"
+    env_file: ./services/paymentServices/.env
 
   promotionServices:
     build: ./services/promotionServices
