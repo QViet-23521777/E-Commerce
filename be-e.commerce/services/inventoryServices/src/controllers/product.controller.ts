@@ -174,7 +174,12 @@ export const handleTracking = async (c: Context) => {
     if (!userId) {
       return c.json({ success: false, message: "userId là bắt buộc" }, 400);
     }
-
+    console.log(
+      "Received tracking events for userId:",
+      userId,
+      "events:",
+      events,
+    );
     if (!Array.isArray(events) || events.length === 0) {
       const result = await trackingWithoutData();
       return c.json({ success: true, ...result });
@@ -209,7 +214,32 @@ export const handleTracking = async (c: Context) => {
 
 export const handleTrackingWithoutData = async (c: Context) => {
   try {
-    const result = await trackingWithoutData();
+    let body: Record<string, unknown> = {};
+    try {
+      const text = await c.req.text();
+      if (text?.trim()) body = JSON.parse(text);
+    } catch {
+      body = {};
+    }
+
+    const {
+      lastPurchasesId = "",
+      lastPurchasesNum = 0,
+      lastSaleId = "",
+      lastSaleNum = 0,
+      lastPointId = "",
+      lastPointNum = 0,
+    } = body;
+
+    const result = await trackingWithoutData(
+      lastPurchasesId as string,
+      Number(lastPurchasesNum),
+      lastSaleId as string,
+      Number(lastSaleNum),
+      lastPointId as string,
+      Number(lastPointNum),
+    );
+
     return c.json({ success: true, data: result }, 200);
   } catch (error) {
     return c.json({ success: false, message: "Internal server error" }, 500);

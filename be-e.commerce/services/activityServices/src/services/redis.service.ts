@@ -167,6 +167,10 @@ class RedisServices {
   async disconnect(): Promise<void> {
     await this.client.quit();
   }
+
+  async ping(): Promise<string> {
+    return this.client.ping();
+  }
 }
 
 export const redisService = new RedisServices();

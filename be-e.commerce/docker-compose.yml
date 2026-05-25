@@ -1,42 +1,157 @@
 services:
+  # ========== GATEWAY ==========
   gateway:
     build: ./gateway
+    container_name: ecommerce-gateway
     ports:
       - "3000:3000"
-    env_file: ./gateway/.env
+    env_file: ./gateway/.env.docker
     depends_on:
-      - userServices
-      - inventoryServices
-      - mailServices
-      - paymentServices
-      - promotionServices
+      - user-service
+      - inventory-service
+      - activity-service
+      - payment-service
+      - mail-service
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./gateway/src:/app/src
+    command: npm run dev
 
-  userServices:
+  # ========== MICROSERVICES ==========
+  user-service:
     build: ./services/userServices
+    container_name: ecommerce-user-service
     ports:
       - "3001:3001"
-    env_file: ./services/userServices/.env
+    env_file: ./services/userServices/.env.docker
+    depends_on:
+      - mongodb
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/userServices/src:/app/src
+    command: npm run dev
 
-  mailServices:
-    build: ./services/mailServices
-    ports:
-      - "3002:3002"
-    env_file: ./services/mailServices/.env
-
-  inventoryServices:
+  inventory-service:
     build: ./services/inventoryServices
+    container_name: ecommerce-inventory-service
     ports:
       - "3003:3003"
-    env_file: ./services/inventoryServices/.env
+    env_file: ./services/inventoryServices/.env.docker
+    depends_on:
+      - mongodb
+      - redis
+      - kafka
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/inventoryServices/src:/app/src
+    command: npm run dev
 
-  paymentServices:
+  activity-service:
+    build: ./services/activityServices
+    container_name: ecommerce-activity-service
+    ports:
+      - "3004:3004"
+    env_file: ./services/activityServices/.env.docker
+    depends_on:
+      - mongodb
+      - redis
+      - kafka
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/activityServices/src:/app/src
+    command: npm run dev
+
+  payment-service:
     build: ./services/paymentServices
+    image: paymentservices:latest
+    container_name: ecommerce-payment-service
     ports:
       - "3005:3005"
-    env_file: ./services/paymentServices/.env
+    env_file: ./services/paymentServices/.env.docker
+    depends_on:
+      - mongodb
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/paymentServices/src:/app/src
+    command: npm run dev
 
-  promotionServices:
-    build: ./services/promotionServices
+  mail-service:
+    build: ./services/mailServices
+    container_name: ecommerce-mail-service
     ports:
-      - "3006:3006"
-    env_file: ./services/promotionServices/.env
+      - "3002:3002"
+    env_file: ./services/mailServices/.env.docker
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/mailServices/src:/app/src
+    command: npm run start:watch
+
+  # ========== DATABASES & SERVICES ==========
+  mongodb:
+    image: mongo:7
+    container_name: ecommerce-mongodb
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - ecommerce-net
+    restart: on-failure
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecommerce-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - ecommerce-net
+    restart: on-failure
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: ecommerce-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - ecommerce-net
+    restart: on-failure
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: ecommerce-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    depends_on:
+      - zookeeper
+    networks:
+      - ecommerce-net
+    restart: on-failure
+
+volumes:
+  mongo-data:
+
+networks:
+  ecommerce-net:
+    driver: bridge

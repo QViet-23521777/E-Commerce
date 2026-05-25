@@ -3,32 +3,53 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { connectDatabase } from "./config/database";
 import productRoutes from "./routes/product.route";
+import inventoryRoutes from "./routes/inventory.route";
+import redisRoutes from "./routes/redis.route";
 import { config } from "./config";
 import { kafkaConsumerService } from "./services/kafkaConsumer.service";
-
+import {
+  checkRedisHealth,
+  checkDatabaseHealth,
+  checkKafkaHealth,
+} from "./controllers/health";
+import { openapiSpec } from "./openapi";
+import { swaggerHtml } from "./utils/swaggerHtml";
 const app = new Hono();
 
 app.use("*", async (c, next) => {
   console.log(`${c.req.method} ${c.req.url}`);
   await next();
 });
-
 app.route("/api/products", productRoutes);
+app.route("/api/inventory", inventoryRoutes);
+app.route("/api/redis", redisRoutes);
+app.get("/openapi.json", (c) => c.json(openapiSpec));
+app.get("/docs", (c) =>
+  c.html(swaggerHtml("Inventory Service API Docs", "/openapi.json")),
+);
+app.get("/health", async (c) => {
+  const [isDatabaseHealthy, isRedisHealthy, isKafkaHealthy] = await Promise.all(
+    [checkDatabaseHealth(), checkRedisHealth(), checkKafkaHealth()],
+  );
 
-app.get("/health", (c) => {
+  const status =
+    isDatabaseHealthy && isRedisHealthy && isKafkaHealthy ? "ok" : "error";
+
   return c.json({
-    status: "ok",
-    service: "inventory-service",
+    service: "Activity Service",
+    status,
     timestamp: new Date().toISOString(),
+    checks: {
+      database: isDatabaseHealthy,
+      redis: isRedisHealthy,
+      kafka: isKafkaHealthy,
+    },
   });
 });
 
 async function startKafkaConsumerWithRetry(): Promise<void> {
   let attempt = 0;
 
-  // Keep the service alive even if Kafka is temporarily unavailable.
-  // This matters especially in docker-compose where Kafka may start later.
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       await kafkaConsumerService.connect();

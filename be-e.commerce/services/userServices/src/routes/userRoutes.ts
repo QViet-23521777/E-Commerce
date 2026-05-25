@@ -11,7 +11,8 @@ import {
   sendVerifyPasswordEmail,
   changePassword,
   verifyingResetPassword,
-} from "../controllers/userController";
+  secondFactorAuth,
+} from "../controllers/user.controller";
 import { Hono } from "hono";
 import { validateRegister, validateLogin } from "../middleware/validateRequest";
 import { internalAuth } from "../middleware/internalAuth";
@@ -28,6 +29,7 @@ userRoutes.get("/verify-email", verifyEmail);
 userRoutes.post("/send-reset-password-email", sendVerifyPasswordEmail);
 userRoutes.post("/verify-resetpassword", verifyingResetPassword);
 userRoutes.post("/change-password", changePassword);
+userRoutes.post("/second-factor-auth", secondFactorAuth);
 
 userRoutes.use("/logout", extractUser);
 userRoutes.use("/profile", extractUser);

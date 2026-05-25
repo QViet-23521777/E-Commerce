@@ -1,21 +1,16 @@
-import { Hono } from "hono";
-import { cors } from "hono/cors";
+import path from "path";
+import dotenv from "dotenv";
 import { serve } from "@hono/node-server";
-import "dotenv/config";
-import userRoutes from "./routes/user.routes";
-import productRoutes from "./routes/inventory.route";
-import paymentRoutes from "./routes/payment.route";
-import promotionRoutes from "./routes/promotion.route";
-const app = new Hono();
+import {
+  startHealthMonitor,
+  stopHealthMonitor,
+} from "./services/health-monitor.service";
+import { createApp } from "./app";
 
-app.use("*", cors());
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-app.get("/health", (c) => c.json({ status: "ok" }));
-
-app.route("/api/users", userRoutes);
-app.route("/api/products", productRoutes);
-app.route("/api/payments", paymentRoutes);
-app.route("/api/promotions", promotionRoutes);
+const app = createApp();
+//startHealthMonitor();
 const port = Number(process.env.PORT) || 3000;
 
 serve({
@@ -24,3 +19,13 @@ serve({
 });
 
 console.log(`Gateway running on port ${port}`);
+
+process.on("SIGTERM", () => {
+  stopHealthMonitor();
+  process.exit(0);
+});
+
+process.on("SIGINT", () => {
+  stopHealthMonitor();
+  process.exit(0);
+});

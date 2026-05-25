@@ -54,3 +54,23 @@ export const validateSearch = async (c: Context, next: Next) => {
 
   await next();
 };
+
+export const validateCreateInventory = async (c: Context, next: Next) => {
+  const { name, productId, quantity } = await c.req.json();
+  const errors: string[] = [];
+
+  if (!name) errors.push("name là bắt buộc");
+  if (!productId) errors.push("productId là bắt buộc");
+  if (quantity === undefined || isNaN(Number(quantity))) {
+    errors.push("quantity phải là số hợp lệ");
+  }
+  if (Number(quantity) <= 0) {
+    errors.push("quantity phải lớn hơn 0");
+  }
+
+  if (errors.length > 0) {
+    return c.json({ success: false, errors }, 400);
+  }
+
+  await next();
+};

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import mongoose from "mongoose";
 import paymentRoutes from "./routes/payment.routes";
+import walletRouter from "./routes/wallet.routes";
 
 const app = new Hono();
 
@@ -12,6 +13,7 @@ app.use("*", async (c, next) => {
 });
 
 app.route("/api/payments", paymentRoutes);
+app.route("/api/wallets", walletRouter);
 
 app.get("/health", (c) => {
   return c.json({

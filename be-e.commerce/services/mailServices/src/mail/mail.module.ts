@@ -5,6 +5,7 @@ import { ConfigService } from "@nestjs/config";
 import { join } from "path";
 import { MailService } from "./mail.service";
 import { MailController } from "./mail.controller";
+import { MailHealthService } from "./mail.health";
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { MailController } from "./mail.controller";
           from: config.get<string>("MAIL_FROM"),
         },
         template: {
-          dir: join(__dirname, "templates"),
+          dir: join(__dirname, "..", "..", "src", "mail", "templates"),
           adapter: new HandlebarsAdapter(),
           options: { strict: true },
         },
@@ -32,6 +33,6 @@ import { MailController } from "./mail.controller";
     }),
   ],
   controllers: [MailController],
-  providers: [MailService],
+  providers: [MailService, MailHealthService],
 })
 export class MailModule {}

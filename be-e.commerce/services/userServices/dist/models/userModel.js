@@ -39,6 +39,7 @@ const UserSchema = new mongoose_1.Schema({
     name: { type: String, required: true, lowercase: true, trim: true },
     email: { type: String, required: true, unique: true, trim: true },
     password: { type: String, required: true, trim: true, minLength: 8 },
+    roleId: { type: mongoose_1.default.Types.ObjectId, ref: "Role", required: true },
     walletId: { type: String, trim: true },
     refreshToken: { type: String },
     isActive: { type: Boolean, default: true },

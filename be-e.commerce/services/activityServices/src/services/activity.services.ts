@@ -4,7 +4,7 @@ import { kafkaService } from "./kafka.service";
 import { ActivityType, UserActivity } from "./redis.service";
 
 const INVENTORY_URL =
-  process.env.PRODUCT_SERVICE_URL || "http://localhost:3003";
+  process.env.PRODUCT_SERVICE_URL || "http://localhost:3000";
 const RECOMMEND_COOLDOWN_MS = 60 * 1000;
 
 const lastRecommendCall = new Map<string, number>();
@@ -15,11 +15,18 @@ const shouldCallRecommend = (userId: string): boolean => {
 };
 
 const callRecommend = async (userId: string, events: UserActivity[]) => {
-  if (!shouldCallRecommend(userId)) return null;
-
+  console.log("Should call recommend for userId?", userId, "events:", events);
+  const shouldCall = shouldCallRecommend(userId);
+  console.log("shouldCallRecommend result:", shouldCall); // do colldown nên bị null
+  if (!shouldCall) {
+    return null;
+  }
   const hasSignal = events.some(
     (e) =>
-      e.activity === "view" || e.activity === "click" || e.activity === "buy",
+      e.activity === "view" ||
+      e.activity === "click" ||
+      e.activity === "buy" ||
+      e.activity === "search",
   );
   if (!hasSignal) return null;
 
@@ -35,11 +42,12 @@ const callRecommend = async (userId: string, events: UserActivity[]) => {
       },
     );
 
-    if (!res.ok) return null;
-    return await res.json();
+    const text = await res.text();
+    if (!text) return null;
+    return JSON.parse(text);
   } catch (err) {
     console.warn("⚠️ Recommend service unavailable, skipping");
-    return null; // ✅ return null thay vì undefined
+    return null;
   }
 };
 
@@ -73,7 +81,10 @@ const flushBatch = async (userId: string) => {
         break;
     }
   }
-
+  console.log(
+    `Flushed ${flushedCount} events for userId ${userId}, queue: `,
+    queue,
+  ); //ở đây có nhưng vào services thì không track được
   const recommendData = await callRecommend(userId, queue);
   console.log("Recommend data:", recommendData);
   try {

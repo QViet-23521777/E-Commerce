@@ -1,6 +1,8 @@
+import { moveMessagePortToContext } from "node:worker_threads";
 import cloudinary from "../config/cloudinary";
-import { Product, PProduct } from "../models/product.model";
+import { Product, PProduct, ProductSchema } from "../models/product.model";
 import { redisService } from "./redis.service";
+import { PipelineStage, Types } from "mongoose";
 const track: {
   price: number;
   sale: number;
@@ -44,7 +46,7 @@ export const createProduct = async (
     .toLowerCase();
 
   const product = await Product.create({
-    name,
+    normalize,
     description,
     price,
     imageUrl,
@@ -285,32 +287,52 @@ export const findProduct = async (
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
-  const items = await Product.find({
-    normalize: { $regex: normalizedFind, $options: "i" },
-  }).limit(limit);
+  const pipeline: PipelineStage[] = [
+    {
+      $match: {
+        normalize: { $regex: normalizedFind, $options: "i" },
+      },
+    },
+    {
+      $addFields: {
+        track: {
+          $add: [
+            { $multiply: ["$price", track.price] },
+            { $multiply: [{ $ifNull: ["$sale", 0] }, track.sale] },
+            {
+              $multiply: [
+                { $ifNull: ["$numPurchases", 0] },
+                track.numPurchases,
+              ],
+            },
+            { $multiply: ["$point", track.point] },
+          ],
+        },
+      },
+    },
+    {
+      $sort: { track: -1, _id: 1 },
+    },
+  ];
 
-  for (const item of items) {
-    item.track =
-      item.price * track.price +
-      (item.sale ?? 0) * track.sale +
-      (item.numPurchases ?? 0) * track.numPurchases +
-      item.point * track.point;
+  if (lastTrack !== undefined && lastId) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { track: { $lt: lastTrack } },
+          { track: lastTrack, _id: { $gt: new Types.ObjectId(lastId) } },
+        ],
+      },
+    });
   }
 
-  const filtered =
-    lastTrack !== undefined && lastId
-      ? items.filter(
-          (item) =>
-            (item.track ?? 0) < lastTrack ||
-            ((item.track ?? 0) === lastTrack && item._id.toString() > lastId),
-        )
-      : items;
+  pipeline.push({ $limit: limit });
 
-  filtered.sort((a, b) => (b.track ?? 0) - (a.track ?? 0));
+  const items = await Product.aggregate(pipeline);
 
-  const lastItem = filtered[filtered.length - 1];
+  const lastItem = items[items.length - 1];
   return {
-    items: filtered,
+    items,
     nextCursor: lastItem
       ? { lastTrack: lastItem.track, lastId: lastItem._id }
       : null,
@@ -334,21 +356,48 @@ export const trackRecommendation = async (data: {
   }[];
 }) => {
   const { userId, events } = data;
+  console.log(
+    "Tracking inventory recommendation for user:",
+    userId,
+    "with events:",
+    events,
+  );
 
-  const listItems: PProduct[] = [];
+  const listItemsMap = new Map<string, PProduct>();
 
+  const pushItems = (items: PProduct[]) => {
+    for (const item of items) {
+      const id = item._id.toString();
+      if (!listItemsMap.has(id)) {
+        listItemsMap.set(id, item);
+      }
+    }
+  };
+
+  // ─── CURSOR CHO findProduct ───
   let lastFindId: string = "";
   let lastFindTrack: number = 0;
+
+  // ─── CURSOR CHO getTopByType ───
+  let lastTopByTypeId: string = "";
+
+  // ─── CURSOR CHO getTopProductPurchases ───
   let lastPurchasesId: string = "";
   let lastPurchasesNum: number = 0;
+
+  // ─── CURSOR CHO getTopSale ───
   let lastSaleId: string = "";
   let lastSaleNum: number = 0;
+
+  // ─── CURSOR CHO getTopPoint ───
   let lastPointId: string = "";
   let lastPointNum: number = 0;
 
   for (const event of events) {
+    console.log("Processing event:", event);
     let { activity, productId, type, keyword } = event;
 
+    // ─── SEARCH ───
     if (activity === "search" && keyword && keyword !== "") {
       const result = await findProduct(
         keyword.toString(),
@@ -356,45 +405,83 @@ export const trackRecommendation = async (data: {
         lastFindTrack,
         lastFindId,
       );
+      console.log("Search result:", result);
 
       const lastItem = result.items[result.items.length - 1];
       if (lastItem) {
         lastFindId = lastItem._id.toString();
         lastFindTrack = Number(lastItem.track ?? 0);
-        listItems.push(...result.items);
+        pushItems(result.items);
+      }
+
+      if (!type && result.items.length > 0) {
+        type = result.items[0].type;
+        console.log(`[SEARCH] Assigned type from search result:`, type);
       }
     }
 
-    if (!type) {
+    // ─── LẤY TYPE NẾU CHƯA CÓ ───
+    if (!type && productId) {
       const product = await Product.findById(productId);
-      type = product.type;
+      if (product) {
+        type = product.type;
+      }
     }
 
-    if ((activity === "view" || activity === "click") && type) {
-      const result = await getTopByType(2, lastPurchasesId, type);
+    // ─── TOP BY TYPE (view / click / search) ───
+    if (
+      (activity === "view" || activity === "click" || activity === "search") &&
+      type
+    ) {
+      const result = await getTopByType(2, lastTopByTypeId, type);
+      console.log(`Top products for type "${type}":`, result);
 
       const lastItem = result.items[result.items.length - 1];
       if (lastItem) {
-        lastPurchasesId = lastItem._id.toString();
-        listItems.push(...result.items);
+        lastTopByTypeId = lastItem._id.toString();
+        pushItems(result.items);
       }
     }
 
-    // if (activity === "buy") {
-    //   const result = await getTopProductPurchases(
-    //     2,
-    //     lastPurchasesNum,
-    //     lastPurchasesId,
-    //   );
+    // ─── BUY → gọi cả 3 function ───
+    if (activity === "buy") {
+      const [resultPurchases, resultSale, resultPoint] = await Promise.all([
+        getTopProductPurchases(6, lastPurchasesNum, lastPurchasesId),
+        getTopSale(6, lastSaleNum, lastSaleId),
+        getTopPoint(6, lastPointNum, lastPointId),
+      ]);
 
-    //   const lastItem = result.items[result.items.length - 1];
-    //   if (lastItem) {
-    //     lastPurchasesId = lastItem._id.toString();
-    //     lastPurchasesNum = lastItem.numPurchases ?? 0;
-    //     listItems.push(...result.items);
-    //   }
-    // }
+      console.log(`Top purchases:`, resultPurchases);
+      console.log(`Top sale:`, resultSale);
+      console.log(`Top point:`, resultPoint);
+
+      const lastPurchasesItem =
+        resultPurchases.items[resultPurchases.items.length - 1];
+      if (lastPurchasesItem) {
+        lastPurchasesId = lastPurchasesItem._id.toString();
+        lastPurchasesNum = lastPurchasesItem.numPurchases ?? 0;
+        pushItems(resultPurchases.items);
+      }
+
+      const lastSaleItem = resultSale.items[resultSale.items.length - 1];
+      if (lastSaleItem) {
+        lastSaleId = lastSaleItem._id.toString();
+        lastSaleNum = lastSaleItem.sale ?? 0;
+        pushItems(resultSale.items);
+      }
+
+      const lastPointItem = resultPoint.items[resultPoint.items.length - 1];
+      if (lastPointItem) {
+        lastPointId = lastPointItem._id.toString();
+        lastPointNum = lastPointItem.point ?? 0;
+        pushItems(resultPoint.items);
+      }
+    }
   }
+
+  // ─── TÍNH TRACK SCORE & SORT ───
+  const listItems = Array.from(listItemsMap.values());
+  console.log("Unique items before scoring:", listItems.length);
 
   for (const item of listItems) {
     item.track =
@@ -406,10 +493,16 @@ export const trackRecommendation = async (data: {
 
   listItems.sort((a, b) => (b.track ?? 0) - (a.track ?? 0));
 
+  // ─── LƯU REDIS ───
   await redisService.setRecommendationData(userId, {
     productId: listItems.map((item) => item._id.toString()),
     types: [...new Set(listItems.map((item) => item.type))],
     updatedAt: new Date(),
+  });
+
+  console.log("Updated recommendation data in Redis for user:", userId, {
+    productId: listItems.map((item) => item._id.toString()),
+    types: [...new Set(listItems.map((item) => item.type))],
   });
 
   return {
@@ -418,6 +511,7 @@ export const trackRecommendation = async (data: {
     cursors: {
       lastFindId,
       lastFindTrack,
+      lastTopByTypeId,
       lastPurchasesId,
       lastPurchasesNum,
       lastSaleId,
@@ -429,18 +523,16 @@ export const trackRecommendation = async (data: {
   };
 };
 
-export const trackingWithoutData = async () => {
+export const trackingWithoutData = async (
+  lastPurchasesId = "",
+  lastPurchasesNum = 0,
+  lastSaleId = "",
+  lastSaleNum = 0,
+  lastPointId = "",
+  lastPointNum = 0,
+) => {
   const listItems: PProduct[] = [];
 
-  let lastPurchasesId: string = "";
-  let lastPurchasesNum: number = 0;
-  let lastSaleId: string = "";
-  let lastSaleNum: number = 0;
-  let lastPointId: string = "";
-  let lastPointNum: number = 0;
-
-  const data = await Product.find({}).limit(5);
-  console.log(data.length);
   const resultPurchases = await getTopProductPurchases(
     2,
     lastPurchasesNum,

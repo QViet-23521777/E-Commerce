@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "rimraf dist && tsc",
-    "start": "node dist/index.js",
-    "test": "node --require ts-node/register --test src/tests/payment.test.ts"
+    "start": "node dist/index.js"
   },
   "keywords": [],
   "author": "",
@@ -20,7 +19,7 @@
     "mongoose": "^9.2.0"
   },
   "devDependencies": {
-    "@types/node": "^25.3.3",
+    "@types/node": "^25.9.1",
     "nodemon": "^3.1.11",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",

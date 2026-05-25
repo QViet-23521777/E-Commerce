@@ -1,24 +1,16 @@
 import { Hono } from "hono";
 import {
   createMomoPaymentController,
-  getMomoPaymentMethodsController,
-  getPaymentHistoryController,
   getPaymentStatusController,
   momoIpnController,
-  refundPaymentController,
-  syncPaymentController,
+  walletCheckoutController,
 } from "../controllers/payment.controller";
 import { extractUser } from "../middleware/extractUser";
 import { internalAuth } from "../middleware/internalAuth";
-import {
-  validateCreateMomoPayment,
-  validatePaymentHistory,
-  validateRefundPayment,
-} from "../middleware/validatePayment";
+import { validateCreateMomoPayment } from "../middleware/validatePayment";
 
 const paymentRoutes = new Hono();
 
-paymentRoutes.get("/methods", internalAuth, getMomoPaymentMethodsController);
 paymentRoutes.post(
   "/momo/create",
   internalAuth,
@@ -27,21 +19,20 @@ paymentRoutes.post(
   createMomoPaymentController,
 );
 paymentRoutes.post("/momo/ipn", internalAuth, momoIpnController);
-paymentRoutes.get(
-  "/history",
-  internalAuth,
-  extractUser,
-  validatePaymentHistory,
-  getPaymentHistoryController,
-);
-paymentRoutes.post("/:orderId/sync", internalAuth, extractUser, syncPaymentController);
+
 paymentRoutes.post(
-  "/:orderId/refund",
+  "/wallet/checkout",
   internalAuth,
   extractUser,
-  validateRefundPayment,
-  refundPaymentController,
+  validateCreateMomoPayment, // dùng lại validator vì cùng input shape
+  walletCheckoutController,
 );
-paymentRoutes.get("/:orderId", internalAuth, extractUser, getPaymentStatusController);
+
+paymentRoutes.get(
+  "/:orderId",
+  internalAuth,
+  extractUser,
+  getPaymentStatusController,
+);
 
 export default paymentRoutes;
