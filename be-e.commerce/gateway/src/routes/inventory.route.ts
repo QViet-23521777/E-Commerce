@@ -22,6 +22,11 @@ router.get("/search", injectInternalSecret, (c) => {
   return Request(c, `${BASE}/api/inventory/search?name=${name}`, "GET");
 });
 
+router.get("/product/:productId", injectInternalSecret, (c) => {
+  const productId = c.req.param("productId");
+  return Request(c, `${BASE}/api/inventory/product/${productId}`, "GET");
+});
+
 router.get("/:inventoryId", authenticate, (c) => {
   const inventoryId = c.req.param("inventoryId");
   return Request(c, `${BASE}/api/inventory/${inventoryId}`, "GET");

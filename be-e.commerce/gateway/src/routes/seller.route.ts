@@ -16,6 +16,11 @@ router.post("/verify", injectInternalSecret, (c) =>
   Request(c, `${BASE}/api/sellers/verify`, "POST"),
 );
 
+router.get("/:userId/public", injectInternalSecret, (c) => {
+  const userId = c.req.param("userId");
+  return Request(c, `${BASE}/api/sellers/${userId}/public`, "GET");
+});
+
 router.get("/:userId", authenticate, (c) => {
   const userId = c.req.param("userId");
   return Request(c, `${BASE}/api/sellers/${userId}`, "GET");
