@@ -12,10 +12,12 @@ import {
   setRessetPasswordToken,
   verifyResetPassword,
   resetPassword,
+  changePasswordByUserId,
   getUserByToken,
   getUserByEmail,
   SecondFactorAuth,
 } from "../services/userServices";
+import { JwtService } from "../utils/jwtService";
 import { mailClient } from "../utils/mailClient";
 
 const HTTP_STATUS: Record<string, number> = {
@@ -25,6 +27,11 @@ const HTTP_STATUS: Record<string, number> = {
   USER_NOT_FOUND: 404,
   INVALID_TOKEN: 401,
   TOKEN_EXPIRED: 400,
+  INVALID_OTP: 400,
+  OTP_REQUIRED: 400,
+  OLD_PASSWORD_INCORRECT: 400,
+  PASSWORD_SAME_AS_OLD: 400,
+  NEW_PASSWORD_REQUIRED: 400,
 };
 
 function handleError(c: Context, error: unknown) {
@@ -42,8 +49,9 @@ export const register = async (c: Context) => {
       password,
     });
 
-    const verifyUrl = `${"http://localhost:3000"}/api/users/verify-email?token=${Token!}`;
-    mailClient.sendVerifyEmail(user.email, user.name, verifyUrl);
+    const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3001";
+    const verifyUrl = `${FRONTEND_URL}/verify-email?token=${Token!}`;
+    mailClient.sendVerifyEmail(user.email, user.name, verifyUrl).catch(() => {});
 
     return c.json(
       {
@@ -85,15 +93,13 @@ export const verifyEmail = async (c: Context) => {
 export const login = async (c: Context) => {
   try {
     const { email, password } = await c.req.json();
-    const { user, otp } = await loginUser({ email, password });
-    console.log("Login thành công, chuẩn bị gửi email OTP...", user.name);
-    const otpEmailSent = await mailClient.sendLoginEmail(
+    const { user, tokens, otp } = await loginUser({ email, password });
+    mailClient.sendLoginEmail(
       user.email,
       user.name,
       otp,
       new Date(Date.now() + 300000).toISOString(),
-    );
-    console.log("Email OTP đã được gửi:", otpEmailSent);
+    ).catch(() => {});
     return c.json(
       {
         success: true,
@@ -105,6 +111,7 @@ export const login = async (c: Context) => {
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         },
+        tokens,
       },
       200,
     );
@@ -323,22 +330,31 @@ export const changePassword = async (c: Context) => {
     if (!token)
       return c.json({ success: false, message: "Token is required" }, 400);
     if (!newPassword)
-      return c.json(
-        { success: false, message: "New password is required" },
-        400,
-      );
+      return c.json({ success: false, message: "New password is required" }, 400);
+
+    // Try reset-token flow first (token stored in DB). Old password not required
+    // here because the user proved ownership of the account by verifying the OTP
+    // that was emailed to them.
+    const byResetToken = await getUserByToken(token).catch(() => null);
+    if (byResetToken) {
+      await resetPassword(token, newPassword, oldPassword);
+      return c.json({ success: true, message: "Complete change password." }, 200);
+    }
+
+    // Fall back to JWT access-token flow (logged-in user changing their own password).
+    // Here oldPassword is required to defend against a stolen-session takeover.
     if (!oldPassword)
-      return c.json(
-        { success: false, message: "Old password is required" },
-        400,
-      );
+      return c.json({ success: false, message: "Old password is required" }, 400);
 
-    const user = await getUserByToken(token);
-    if (!user)
-      return c.json({ success: false, message: "User not found" }, 404);
+    let userId: string;
+    try {
+      const decoded = JwtService.verifyAccessToken(token) as { userId: string };
+      userId = decoded.userId;
+    } catch {
+      return c.json({ success: false, message: "USER_NOT_FOUND" }, 404);
+    }
 
-    await resetPassword(token, newPassword, oldPassword);
-
+    await changePasswordByUserId(userId, oldPassword, newPassword);
     return c.json({ success: true, message: "Complete change password." }, 200);
   } catch (error) {
     return handleError(c, error);

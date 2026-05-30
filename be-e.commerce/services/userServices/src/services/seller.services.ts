@@ -38,8 +38,16 @@ export const verifySeller = async (userId: string, otp: string) => {
   if (!user) throw new Error("USER_NOT_FOUND");
   if (user.otp !== otp) throw new Error("INVALID_OTP");
 
-  const userProfile = await UserProfile.findOne({ userId });
-  if (!userProfile) throw new Error("USER_PROFILE_NOT_FOUND");
+  // Auto-create UserProfile if the user upgraded to seller before verifying
+  // their email (verifyUserEmail is what normally seeds it).
+  let userProfile = await UserProfile.findOne({ userId });
+  if (!userProfile) {
+    userProfile = await UserProfile.create({
+      userId: user._id,
+      preferences: [],
+      searchHistory: [],
+    });
+  }
   user.roleId = (await Role.findOne({ name: "seller" }))!._id;
   user.otp = undefined;
   const tokens = await JwtService.generateTokenPair({
@@ -79,4 +87,16 @@ export const deleteSellerAccount = async (userId: string) => {
   await UserProfile.deleteOne({ userId });
   await user.deleteOne();
   return { message: "Seller account deleted successfully" };
+};
+
+export const getSellerPublicProfile = async (userId: string) => {
+  const user = await User.findById(userId);
+  if (!user) throw new Error("USER_NOT_FOUND");
+  const profile: any = await UserProfile.findOne({ userId });
+  return {
+    id: user._id,
+    name: user.name,
+    address: profile?.address ?? "",
+    avatar: profile?.avatar ?? "",
+  };
 };
