@@ -23,11 +23,17 @@ export const sanitizeRequestBody = async (c: Context, next: Next) => {
     }
   });
 
-  try {
-    const body = await c.req.json();
-    const sanitizedBody = sanitizeValue(body);
-    c.set("sanitizedBody", sanitizedBody);
-  } catch {}
+  // Only attempt to read the JSON body for JSON requests. Calling c.req.json()
+  // on a multipart/form-data request consumes and locks the body stream, which
+  // breaks the later parseBody() used for product image uploads.
+  const contentType = c.req.header("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      const body = await c.req.json();
+      const sanitizedBody = sanitizeValue(body);
+      c.set("sanitizedBody", sanitizedBody);
+    } catch {}
+  }
 
   await next();
 };

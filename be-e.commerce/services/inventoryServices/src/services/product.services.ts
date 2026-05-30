@@ -1,6 +1,7 @@
 import { moveMessagePortToContext } from "node:worker_threads";
 import cloudinary from "../config/cloudinary";
 import { Product, PProduct, ProductSchema } from "../models/product.model";
+import Inventory from "../models/inventory.model";
 import { redisService } from "./redis.service";
 import { PipelineStage, Types } from "mongoose";
 const track: {
@@ -25,20 +26,36 @@ export const createProduct = async (
   sale?: number,
   numPurchases?: number,
 ) => {
-  const imageUrl = await new Promise<string>((resolve, reject) => {
-    // Create an upload stream to Cloudinary
-    // The callback is triggered once the upload completes or fails
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: "Product" }, // save to "Product" folder on Cloudinary
-      (error, result) => {
-        if (error)
-          reject(error); // upload failed → reject with error
-        else resolve(result!.secure_url); // upload succeeded → resolve with image URL
-      },
+  const uploadToCloudinary = () =>
+    new Promise<string>((resolve, reject) => {
+      // Create an upload stream to Cloudinary
+      // The callback is triggered once the upload completes or fails
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: "Product" }, // save to "Product" folder on Cloudinary
+        (error, result) => {
+          if (error)
+            reject(error); // upload failed → reject with error
+          else resolve(result!.secure_url); // upload succeeded → resolve with image URL
+        },
+      );
+      // Push the file Buffer (received from Multer) into the stream to start uploading
+      stream.end(fileBuffer);
+    });
+
+  // Cloudinary is optional: if credentials are missing/invalid (e.g. local dev),
+  // fall back to a deterministic placeholder so listing creation still succeeds.
+  let imageUrl: string;
+  try {
+    imageUrl = await uploadToCloudinary();
+  } catch (err) {
+    console.warn(
+      "[createProduct] Cloudinary upload failed, using placeholder image:",
+      (err as { message?: string })?.message ?? err,
     );
-    // Push the file Buffer (received from Multer) into the stream to start uploading
-    stream.end(fileBuffer);
-  });
+    imageUrl = `https://placehold.co/600x600/eeeeee/001a41?text=${encodeURIComponent(
+      name.slice(0, 20),
+    )}`;
+  }
 
   const normalize = name
     .normalize("NFD")
@@ -46,6 +63,7 @@ export const createProduct = async (
     .toLowerCase();
 
   const product = await Product.create({
+    name,
     normalize,
     description,
     price,
@@ -60,7 +78,7 @@ export const createProduct = async (
 };
 
 export const getProductById = async (productId: string) => {
-  const product = await Product.findById(productId);
+  const product = await Product.findOne({ _id: productId, status: "approved" });
   if (!product) throw new Error("Product does not exists");
   return product;
 };
@@ -80,7 +98,7 @@ export const getTopProductPurchases = async (
   lastnumPurchases?: number,
   lastId?: string,
 ) => {
-  const query: any = {};
+  const query: any = { status: "approved" };
   if (lastnumPurchases != undefined && lastId) {
     query.$or = [
       { numPurchases: { $lt: lastnumPurchases } },
@@ -109,7 +127,7 @@ export const getTopSale = async (
   lastSale: number,
   lastId: string,
 ) => {
-  const query: any = {};
+  const query: any = { status: "approved" };
   if (lastSale != undefined && lastId) {
     query.$or = [
       { sale: { $lt: lastSale } },
@@ -138,7 +156,7 @@ export const getTopPoint = async (
   lastPoint: number,
   lastId: string,
 ) => {
-  const query: any = {};
+  const query: any = { status: "approved" };
   if (lastPoint != undefined && lastId) {
     query.$or = [
       { point: { $lt: lastPoint } },
@@ -167,7 +185,7 @@ export const getTopByType = async (
   lastId: string,
   type: string,
 ) => {
-  const query: Record<string, unknown> = { type };
+  const query: Record<string, unknown> = { type, status: "approved" };
   if (lastId) {
     query._id = { $gt: lastId };
   }
@@ -209,7 +227,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
         let items: PProduct[] = [];
 
         if (ord === "price") {
-          items = await Product.find()
+          items = await Product.find({ status: "approved" })
             .sort({ [element]: -1, _id: 1, [ord]: 1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -218,7 +236,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
             lastPrice = lastItem.price;
           }
         } else if (ord === "sale") {
-          items = await Product.find()
+          items = await Product.find({ status: "approved" })
             .sort({ [element]: -1, _id: 1, [ord]: -1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -227,7 +245,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
             lastSale = lastItem.sale ?? 0;
           }
         } else if (ord === "numPurchases") {
-          items = await Product.find()
+          items = await Product.find({ status: "approved" })
             .sort({ [element]: -1, _id: 1, [ord]: -1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -236,7 +254,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
             lastnumPurchases = lastItem.numPurchases ?? 0;
           }
         } else if (ord === "point") {
-          items = await Product.find()
+          items = await Product.find({ status: "approved" })
             .sort({ [element]: -1, _id: 1, [ord]: -1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -291,6 +309,7 @@ export const findProduct = async (
     {
       $match: {
         normalize: { $regex: normalizedFind, $options: "i" },
+        status: "approved",
       },
     },
     {
@@ -592,4 +611,42 @@ export const trackingWithoutData = async (
     },
     items: uniqueItems,
   };
+};
+
+export const listProductsByStatus = async (
+  status: string = "pending",
+  limit: number = 50,
+) => {
+  const products = await Product.find({ status })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
+  const ids = products.map((p) => p._id);
+  const invs = await Inventory.find({ productId: { $in: ids } })
+    .select("productId sellerId")
+    .lean();
+  const sellerByProduct = new Map(
+    invs.map((i) => [String(i.productId), String(i.sellerId)]),
+  );
+  return products.map((p) => ({
+    ...p,
+    sellerId: sellerByProduct.get(String(p._id)) ?? null,
+  }));
+};
+
+export const setProductStatus = async (
+  productId: string,
+  status: string,
+  reason?: string,
+) => {
+  if (!["approved", "rejected", "pending"].includes(status)) {
+    throw new Error("INVALID_STATUS");
+  }
+  const update: Record<string, unknown> = { status };
+  update.rejectionReason = status === "rejected" ? reason ?? "" : undefined;
+  const product = await Product.findByIdAndUpdate(productId, update, {
+    new: true,
+  });
+  if (!product) throw new Error("Product does not exists");
+  return product;
 };

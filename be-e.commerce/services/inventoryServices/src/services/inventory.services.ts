@@ -169,3 +169,18 @@ export const deleteInventory = async (inventoryId: string) => {
   await Inventory.findByIdAndDelete(inventoryId);
   return inventory;
 };
+
+export const getShopByProductId = async (productId: string) => {
+  const inv = await Inventory.findOne({ productId });
+  if (!inv) throw new Error("SHOP_NOT_FOUND");
+  const sellerId = String(inv.sellerId);
+  const sellerInventories = await Inventory.find({ sellerId }).populate(
+    "productId",
+  );
+  const productCount = sellerInventories.length;
+  const unitsSold = sellerInventories.reduce((sum, it) => {
+    const p = it.productId as unknown as { numPurchases?: number } | null;
+    return sum + (p?.numPurchases ?? 0);
+  }, 0);
+  return { sellerId, productCount, unitsSold };
+};

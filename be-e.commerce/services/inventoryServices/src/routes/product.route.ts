@@ -15,6 +15,8 @@ import {
   handleFindProduct,
   handleTracking,
   handleTrackingWithoutData,
+  handleListModeration,
+  handleSetProductStatus,
 } from "../controllers/product.controller";
 import { sanitizeRequestBody } from "../middleware/sanitize";
 
@@ -32,6 +34,9 @@ router.get("/top/list-type", validatePagination, handleGetTopByListType);
 router.get("/top/type/:type", validatePagination, handleGetTopByType);
 router.post("/recommend", handleTrackingWithoutData);
 router.post("/recommend/:userId", validatePagination, handleTracking);
+
+router.get("/moderation", handleListModeration);
+router.patch("/:productId/status", handleSetProductStatus);
 
 router.get("/:productId", ProductById);
 

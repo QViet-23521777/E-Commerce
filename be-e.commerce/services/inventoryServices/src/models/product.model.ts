@@ -13,6 +13,8 @@ export interface PProduct extends Document {
   createdAt: Date;
   updatedAt: Date;
   track?: number;
+  status: "pending" | "approved" | "rejected";
+  rejectionReason?: string;
 }
 
 export const ProductSchema = new Schema(
@@ -33,6 +35,14 @@ export const ProductSchema = new Schema(
     numPurchases: { type: Number, default: 0 },
 
     track: { type: Number },
+
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+      index: true,
+    },
+    rejectionReason: { type: String },
   },
   { timestamps: true },
 );
