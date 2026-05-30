@@ -1,202 +1,246 @@
 "use client";
 
-import { ChevronRight, Heart, ShoppingCart, Minus, Plus, ChevronDown, Play } from "lucide-react";
+import {
+  ChevronRight,
+  Heart,
+  ShoppingCart,
+  Minus,
+  Plus,
+  Store,
+  MapPin,
+  MessageCircle,
+  Package,
+} from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
-import { useState } from "react";
+import { use, useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import {
+  fetchInventoryByName,
+  fetchProductById,
+  fetchShopByProduct,
+  fetchTopByType,
+  formatVND,
+  type ShopOfProduct,
+  type UIProduct,
+} from "@/lib/products";
+import { fetchSellerPublicProfile, type PublicShop } from "@/lib/seller";
+import { addToCart } from "@/lib/cart";
 
-const THUMBNAILS = [
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuBqiE_3yYfaa9MGAf4ckjwM4q7Mqu2_Iz1nKbpM0LLiQiglJWVhM0M2cfKayFDUrfgnwhjus7cAj6Jm4tLDHon9-mSigEVHGvRoiKbCZGnDSEk6mTI3Ilu7ivPq83PedR7syPOMj7Echsltht2GcxDbvBHGrK2XDC3utMl7Hq4ZKuy1vCBtuybpYu4hfAVauclNgV2rdeiE4NS6_ImSl5Hcc74MRjZAc2-3ub60TPbLQ-qGPv4ZSop3evz7-r4Hh7LmhrVVRrYJzAyt",
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuBQnttJbzpiC4QRt8GQvgN_K-LPivaoWxQbJdHzb6kosJGev_3CVhSB--6w9rlF8agmBGyseznO-fU5e1Y510XVbDyymty-zPapnIeQH0i2v-czpBGaZUG686ds_gVZg8Yt2DZzTsztQzLti-onPa5W4qfl6OsvhvxKFZgqmbBaWe72wtwVwwZQuR9HEBPYH3t82nWIzD50ODtN_69mApTqtSBSltL2RWLb-lr-ZAJHgfzLF2T9M8XCj94gw-qjt3zBlxgWDXT7jHus",
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuBEFirrcDk_MGZVSgIh0HkV36UXMReWFCUmRrxoMFgIhks4x_ZjGdrOi2sUWXB_9R0NaUU7MVmhoqjFxo5_9JA9lOKMnc1xdphCtBJQj6SBAXqrc-dCPeSbM4oGqCwgrjXCItbiU-Sg--uZ4Y49um0K_Jjn1fvsI7_xnZvhuuyBbhhN5cPCeSwxgb6KraO3FNpwmpW0eCzcHee7t4hHa3wpFSiKrVSHaVFb2mh2rRwOCqEWH3M8B7I0XSaa-7IMyZtPS9qhuUp37wnL",
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuDuYPHC5ZucXkMLQdPzRtMwA5fwVf4vodbpXzIAj1S6x4XKjM2fAlF7-u-Z-AU3MWyNLivbqT5NJVyhECEfYebs0h9qutzgtz955zo46r6UKJ_32aNcoy_7_fNGgqJzQY7CDeFPibKGTiQOwhV3lPfA9eC6I9W4_XCDYFh4FgdiwfC_x7VTV8hox8fmMw3BIDeUe8i7OCB11qcswwjZTdPA83Cj2SJY5IbVEXpLsg6dQg6vLyyj5o-lN_LUe6-ocebtxqygqhHLieN3",
-];
+const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-const SPECS = [
-  { label: "Material", value: "100% ethically sourced bamboo" },
-  { label: "Cord", value: "3m fabric-covered navy" },
-  { label: "Bulb Type", value: "E27 LED, max 60W" },
-  { label: "Weight", value: "1.2 kg" },
-  { label: "Diameter Options", value: "40cm / 60cm / 80cm" },
-  { label: "Country of Origin", value: "Vietnam" },
-];
+export default function ProductDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
 
-const TABS = [
-  {
-    id: "specs",
-    label: "Specifications",
-    content: SPECS,
-  },
-  {
-    id: "care",
-    label: "Installation & Care",
-    content: [
-      { label: "Cleaning", value: "Wipe with a dry or slightly damp cloth. Avoid harsh chemicals." },
-      { label: "Installation", value: "Professional installation recommended. Suitable for ceilings up to 3.5m." },
-      { label: "Bulb included", value: "No. Compatible with all E27 LED and filament bulbs." },
-    ],
-  },
-  {
-    id: "shipping",
-    label: "Shipping",
-    content: [
-      { label: "Dispatch", value: "Ships in 2–4 business days." },
-      { label: "Packaging", value: "Flat-packed in FSC-certified cardboard." },
-      { label: "Returns", value: "30-day returns on undamaged items." },
-    ],
-  },
-];
+  const [product, setProduct] = useState<UIProduct | null>(null);
+  const [related, setRelated] = useState<UIProduct[]>([]);
+  const [stock, setStock] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-const RELATED = [
-  { id: 2, name: "Ribbed Glass Vase", price: "$125.00", image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBQnttJbzpiC4QRt8GQvgN_K-LPivaoWxQbJdHzb6kosJGev_3CVhSB--6w9rlF8agmBGyseznO-fU5e1Y510XVbDyymty-zPapnIeQH0i2v-czpBGaZUG686ds_gVZg8Yt2DZzTsztQzLti-onPa5W4qfl6OsvhvxKFZgqmbBaWe72wtwVwwZQuR9HEBPYH3t82nWIzD50ODtN_69mApTqtSBSltL2RWLb-lr-ZAJHgfzLF2T9M8XCj94gw-qjt3zBlxgWDXT7jHus" },
-  { id: 3, name: "Task Lamp T-1", price: "$120.00", image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBqiE_3yYfaa9MGAf4ckjwM4q7Mqu2_Iz1nKbpM0LLiQiglJWVhM0M2cfKayFDUrfgnwhjus7cAj6Jm4tLDHon9-mSigEVHGvRoiKbCZGnDSEk6mTI3Ilu7ivPq83PedR7syPOMj7Echsltht2GcxDbvBHGrK2XDC3utMl7Hq4ZKuy1vCBtuybpYu4hfAVauclNgV2rdeiE4NS6_ImSl5Hcc74MRjZAc2-3ub60TPbLQ-qGPv4ZSop3evz7-r4Hh7LmhrVVRrYJzAyt" },
-  { id: 4, name: "Mono Plate Series", price: "$55.00", image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBEFirrcDk_MGZVSgIh0HkV36UXMReWFCUmRrxoMFgIhks4x_ZjGdrOi2sUWXB_9R0NaUU7MVmhoqjFxo5_9JA9lOKMnc1xdphCtBJQj6SBAXqrc-dCPeSbM4oGqCwgrjXCItbiU-Sg--uZ4Y49um0K_Jjn1fvsI7_xnZvhuuyBbhhN5cPCeSwxgb6KraO3FNpwmpW0eCzcHee7t4hHa3wpFSiKrVSHaVFb2mh2rRwOCqEWH3M8B7I0XSaa-7IMyZtPS9qhuUp37wnL" },
-];
-
-export default function ProductDetailPage() {
-  const [activeImage, setActiveImage] = useState(0);
-  const [activeTab, setActiveTab] = useState("specs");
-  const [selectedSize, setSelectedSize] = useState("60cm");
   const [quantity, setQuantity] = useState(1);
   const [wishlisted, setWishlisted] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [activeTab, setActiveTab] = useState("specs");
+  const [shop, setShop] = useState<PublicShop | null>(null);
+  const [shopStats, setShopStats] = useState<ShopOfProduct | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setNotFound(false);
+      const p = await fetchProductById(id);
+      if (cancelled) return;
+      if (!p) {
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+      setProduct(p);
+      setLoading(false);
+
+      fetchShopByProduct(p.id).then(async (stats) => {
+        if (cancelled || !stats) return;
+        setShopStats(stats);
+        const sp = await fetchSellerPublicProfile(stats.sellerId);
+        if (!cancelled) setShop(sp);
+      });
+
+      const [rel, hits] = await Promise.all([
+        p.type ? fetchTopByType(p.type, 6) : Promise.resolve([] as UIProduct[]),
+        fetchInventoryByName(p.name),
+      ]);
+      if (cancelled) return;
+      setRelated(rel.filter((r) => r.id !== p.id).slice(0, 3));
+      if (hits.length === 0) {
+        setStock(null);
+      } else {
+        const total = hits.reduce((sum, h) => sum + (Number(h.quantity) || 0), 0);
+        setStock(total);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const handleAddToCart = () => {
+    if (!product) return;
+    addToCart({
+      productId: product.id,
+      name: product.name,
+      image: product.image,
+      price: product.price,
+      qty: quantity,
+      variant: product.type,
+    });
     setAddedToCart(true);
     setTimeout(() => setAddedToCart(false), 2000);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Navbar />
+        <main className="flex-1 max-w-[1280px] mx-auto px-10 py-12 w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+            <div className="aspect-square bg-surface-container-low animate-pulse rounded-2xl" />
+            <div className="space-y-4">
+              <div className="h-8 bg-surface-container-high rounded animate-pulse w-2/3" />
+              <div className="h-12 bg-surface-container-high rounded animate-pulse w-full" />
+              <div className="h-4 bg-surface-container-high rounded animate-pulse w-1/2" />
+              <div className="h-32 bg-surface-container-low rounded animate-pulse w-full" />
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (notFound || !product) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center px-10 py-24">
+          <div className="text-center space-y-3">
+            <p className="text-headline-md font-bold text-deep-navy">Product not found</p>
+            <p className="text-sm text-on-surface-variant">
+              The product you&apos;re looking for may have been removed.
+            </p>
+            <Link
+              href="/"
+              className="inline-block mt-4 h-11 px-6 bg-primary-container text-deep-navy text-sm font-bold rounded-xl border-2 border-transparent hover:border-deep-navy"
+            >
+              Back to home
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  const inStock = stock === null ? true : stock > 0;
+  const stockLabel =
+    stock === null
+      ? "Stock managed by sellers"
+      : stock > 0
+        ? `${stock} in stock`
+        : "Out of stock";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
 
       <main className="flex-1">
-        {/* Breadcrumb */}
         <div className="border-b border-outline-variant bg-white">
           <div className="max-w-[1280px] mx-auto px-10 py-4 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
             <Link href="/" className="hover:text-deep-navy transition-colors">Home</Link>
             <ChevronRight className="w-3 h-3" />
-            <Link href="/search?category=lighting" className="hover:text-deep-navy transition-colors">Lighting</Link>
-            <ChevronRight className="w-3 h-3" />
-            <span className="text-deep-navy">Pendants</span>
+            {product.type && (
+              <>
+                <Link
+                  href={`/search?category=${encodeURIComponent(product.type)}`}
+                  className="hover:text-deep-navy transition-colors"
+                >
+                  {product.type}
+                </Link>
+                <ChevronRight className="w-3 h-3" />
+              </>
+            )}
+            <span className="text-deep-navy line-clamp-1">{product.name}</span>
           </div>
         </div>
 
-        {/* Product section */}
         <div className="max-w-[1280px] mx-auto px-10 py-12">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-            {/* ── Image gallery ── */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+              transition={{ duration: 0.5, ease: EASE }}
               className="space-y-4"
             >
-              {/* Main image */}
               <div className="relative aspect-square border-2 border-deep-navy rounded-2xl overflow-hidden bg-surface-container-low">
-                <AnimatePresence mode="wait">
-                  <motion.img
-                    key={activeImage}
-                    src={THUMBNAILS[activeImage]}
-                    alt="Hand-Woven Bamboo Lamp"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.25 }}
-                    className="w-full h-full object-contain p-12"
-                  />
-                </AnimatePresence>
-                {/* Video play hint */}
-                <button className="absolute bottom-5 right-5 w-10 h-10 bg-white border-2 border-deep-navy rounded-xl flex items-center justify-center hover:bg-primary-container transition-colors">
-                  <Play className="w-4 h-4 text-deep-navy fill-deep-navy" />
-                </button>
-              </div>
-
-              {/* Thumbnails */}
-              <div className="grid grid-cols-4 gap-3">
-                {THUMBNAILS.map((src, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setActiveImage(i)}
-                    className={`aspect-square border-2 rounded-xl overflow-hidden bg-surface-container-low transition-colors duration-150 ${
-                      activeImage === i ? "border-primary-container" : "border-deep-navy/30 hover:border-deep-navy"
-                    }`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt="" className="w-full h-full object-contain p-3" />
-                  </button>
-                ))}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="w-full h-full object-contain p-12"
+                />
+                {product.salePercent && product.salePercent > 0 ? (
+                  <span className="absolute top-5 left-5 bg-deep-navy text-primary-container text-[10px] font-bold uppercase px-3 py-1 rounded-lg tracking-widest">
+                    -{product.salePercent}%
+                  </span>
+                ) : null}
               </div>
             </motion.div>
 
-            {/* ── Product info ── */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.1, ease: [0.23, 1, 0.32, 1] }}
+              transition={{ duration: 0.5, delay: 0.1, ease: EASE }}
               className="space-y-8"
             >
-              {/* Badge + title */}
               <div className="space-y-3">
-                <span className="inline-block px-3 py-1 bg-deep-navy text-primary-container text-[10px] font-bold uppercase tracking-widest rounded-lg">
-                  Bestseller
-                </span>
-                <h1 className="text-display-lg-mobile text-deep-navy">Hand-Woven Bamboo Lamp</h1>
-                <div className="flex items-center gap-3">
-                  <div className="flex">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <svg key={star} className="w-4 h-4 text-primary-container fill-current" viewBox="0 0 20 20">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                      </svg>
-                    ))}
-                  </div>
-                  <span className="text-sm text-on-surface-variant">(147 reviews)</span>
+                {product.tag && (
+                  <span className="inline-block px-3 py-1 bg-deep-navy text-primary-container text-[10px] font-bold uppercase tracking-widest rounded-lg">
+                    {product.tag}
+                  </span>
+                )}
+                <h1 className="text-display-lg-mobile text-deep-navy">{product.name}</h1>
+                {product.type && (
+                  <p className="text-xs uppercase tracking-widest text-on-surface-variant">{product.type}</p>
+                )}
+                <div className="flex items-baseline gap-4">
+                  <p className="text-3xl font-bold tracking-tight text-deep-navy">
+                    {formatVND(product.price)}
+                  </p>
+                  {product.originalPrice && (
+                    <p className="text-lg text-on-surface-variant line-through">
+                      {formatVND(product.originalPrice)}
+                    </p>
+                  )}
                 </div>
-                <p className="text-3xl font-bold tracking-tight text-deep-navy">$345.00</p>
+                {product.point ? (
+                  <p className="text-xs font-semibold text-primary">
+                    Earn {product.point} reward points
+                  </p>
+                ) : null}
               </div>
 
-              <p className="text-body-md text-on-surface-variant">
-                Clinical light diffusion through a structurally rigorous natural bamboo matrix.
-                Handcrafted by artisans in the Mekong Delta using traditional weaving techniques
-                refined over three generations.
-              </p>
+              {product.description && (
+                <p className="text-body-md text-on-surface-variant">
+                  {product.description}
+                </p>
+              )}
 
-              {/* Finish selector */}
-              <div className="space-y-3">
-                <span className="text-xs font-bold uppercase tracking-widest text-deep-navy">Finish</span>
-                <div className="relative">
-                  <select className="w-full h-12 px-4 pr-10 border-2 border-deep-navy rounded-xl bg-white text-sm text-deep-navy appearance-none cursor-pointer">
-                    <option>Natural Birch</option>
-                    <option>Dark Walnut</option>
-                    <option>Bleached White</option>
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-deep-navy pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Size selector */}
-              <div className="space-y-3">
-                <span className="text-xs font-bold uppercase tracking-widest text-deep-navy">Diameter</span>
-                <div className="flex gap-3">
-                  {["40cm", "60cm", "80cm"].map((size) => (
-                    <button
-                      key={size}
-                      onClick={() => setSelectedSize(size)}
-                      className={`h-10 px-5 border-2 rounded-xl text-sm font-semibold transition-colors duration-150 active:scale-[0.97] ${
-                        selectedSize === size
-                          ? "bg-deep-navy text-primary-container border-deep-navy"
-                          : "border-deep-navy/40 text-deep-navy hover:border-deep-navy"
-                      }`}
-                    >
-                      {size}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Quantity */}
               <div className="space-y-3">
                 <span className="text-xs font-bold uppercase tracking-widest text-deep-navy">Quantity</span>
                 <div className="flex items-center border-2 border-deep-navy rounded-xl overflow-hidden w-fit">
@@ -218,11 +262,11 @@ export default function ProductDetailPage() {
                 </div>
               </div>
 
-              {/* CTA buttons */}
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={handleAddToCart}
-                  className="flex-1 h-14 flex items-center justify-center gap-2.5 bg-primary-container text-deep-navy text-label-caps font-bold rounded-xl border-2 border-transparent hover:border-deep-navy transition-colors duration-150 active:scale-[0.97]"
+                  disabled={!inStock}
+                  className="flex-1 h-14 flex items-center justify-center gap-2.5 bg-primary-container text-deep-navy text-label-caps font-bold rounded-xl border-2 border-transparent hover:border-deep-navy transition-colors duration-150 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ShoppingCart className="w-5 h-5" />
                   <AnimatePresence mode="wait">
@@ -231,9 +275,9 @@ export default function ProductDetailPage() {
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -8 }}
-                      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                      transition={{ duration: 0.2, ease: EASE }}
                     >
-                      {addedToCart ? "Added ✓" : "Add to Basket"}
+                      {!inStock ? "Out of stock" : addedToCart ? "Added ✓" : "Add to Basket"}
                     </motion.span>
                   </AnimatePresence>
                 </button>
@@ -247,101 +291,163 @@ export default function ProductDetailPage() {
                 </button>
               </div>
 
-              {/* Shipping notice */}
               <div className="flex items-center gap-3 p-4 bg-surface-container-low border border-outline-variant rounded-xl">
-                <div className="w-2 h-2 bg-primary rounded-full shrink-0" />
+                <div className={`w-2 h-2 rounded-full shrink-0 ${inStock ? "bg-primary" : "bg-error"}`} />
                 <p className="text-sm text-on-surface-variant">
-                  <span className="font-semibold text-deep-navy">In stock</span> — Ships in 2–4 business days. Free shipping on orders over $150.
+                  <span className="font-semibold text-deep-navy">{inStock ? "In stock" : "Unavailable"}</span>
+                  {" — "}
+                  {stockLabel}. Free shipping on orders over {formatVND(500000)}.
                 </p>
               </div>
+
+              {(shop || shopStats) && (
+                <div className="p-5 bg-white border-2 border-deep-navy rounded-xl space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-11 h-11 rounded-xl bg-deep-navy flex items-center justify-center shrink-0">
+                        <Store className="w-5 h-5 text-primary-container" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Sold by</p>
+                        <p className="text-sm font-bold text-deep-navy truncate capitalize">
+                          {shop?.name || "Shop"}
+                        </p>
+                        {shop?.address && (
+                          <p className="flex items-center gap-1 text-xs text-on-surface-variant truncate">
+                            <MapPin className="w-3 h-3 shrink-0" />
+                            {shop.address}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled
+                      title="Chat is coming soon"
+                      className="flex items-center gap-1.5 h-9 px-3 shrink-0 border-2 border-deep-navy/20 text-deep-navy text-xs font-bold rounded-xl opacity-60 cursor-not-allowed"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Chat
+                    </button>
+                  </div>
+                  {shopStats && (
+                    <div className="flex items-center gap-5 pt-3 border-t border-outline-variant">
+                      <span className="flex items-center gap-1.5 text-xs font-semibold text-deep-navy">
+                        <Package className="w-3.5 h-3.5 text-primary" />
+                        {shopStats.productCount} products
+                      </span>
+                      <span className="text-xs font-semibold text-deep-navy">
+                        {shopStats.unitsSold.toLocaleString()} sold
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </motion.div>
           </div>
 
-          {/* ── Expandable tabs ── */}
           <div className="mt-16 border-t-2 border-deep-navy">
             <div className="flex border-b-2 border-deep-navy">
-              {TABS.map((tab) => (
+              {(["specs", "shipping"] as const).map((tab) => (
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
                   className={`h-14 px-8 text-sm font-bold uppercase tracking-widest transition-colors duration-150 border-r-2 border-deep-navy last:border-r-0 ${
-                    activeTab === tab.id
+                    activeTab === tab
                       ? "bg-deep-navy text-primary-container"
                       : "text-deep-navy hover:bg-surface-container"
                   }`}
                 >
-                  {tab.label}
+                  {tab === "specs" ? "Details" : "Shipping"}
                 </button>
               ))}
             </div>
 
-            <AnimatePresence mode="wait">
-              {TABS.map(
-                (tab) =>
-                  activeTab === tab.id && (
-                    <motion.div
-                      key={tab.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-                      className="py-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                    >
-                      {tab.content.map((row) => (
-                        <div key={row.label} className="p-5 bg-white border border-deep-navy/20 rounded-xl">
-                          <dt className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">{row.label}</dt>
-                          <dd className="mt-1.5 text-sm text-deep-navy">{row.value}</dd>
-                        </div>
-                      ))}
-                    </motion.div>
-                  )
+            <div className="py-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {activeTab === "specs" ? (
+                <>
+                  <DetailRow label="Category" value={product.type ?? "—"} />
+                  <DetailRow label="Reward Points" value={String(product.point ?? 0)} />
+                  <DetailRow label="Sold" value={`${product.numPurchases ?? 0} units`} />
+                  {product.salePercent && product.salePercent > 0 ? (
+                    <DetailRow label="Discount" value={`${product.salePercent}% off`} />
+                  ) : null}
+                  <DetailRow label="Original Price" value={formatVND(product.originalPrice ?? product.price)} />
+                  <DetailRow label="Current Price" value={formatVND(product.price)} />
+                </>
+              ) : (
+                <>
+                  <DetailRow label="Dispatch" value="Ships in 2–4 business days." />
+                  <DetailRow label="Free shipping" value={`On orders over ${formatVND(500000)}`} />
+                  <DetailRow label="Returns" value="30-day returns on undamaged items." />
+                </>
               )}
-            </AnimatePresence>
+            </div>
           </div>
 
-          {/* ── Related products ── */}
-          <div className="mt-16">
-            <div className="flex items-end justify-between mb-8 border-b-2 border-deep-navy pb-4">
-              <h2 className="text-headline-md font-bold uppercase tracking-tight text-deep-navy">You May Also Like</h2>
-              <Link href="/search" className="text-sm font-bold uppercase text-on-surface-variant hover:text-primary transition-colors">
-                View All →
-              </Link>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-              {RELATED.map((prod, i) => (
-                <motion.div
-                  key={prod.id}
-                  initial={{ opacity: 0, y: 14 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.07, duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
-                  className="group border border-deep-navy rounded-2xl overflow-hidden bg-white card-hover"
-                >
-                  <Link href={`/products/${prod.id}`} className="block aspect-square border-b border-deep-navy/20 bg-surface-container-low p-8">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={prod.image}
-                      alt={prod.name}
-                      className="w-full h-full object-contain grayscale group-hover:grayscale-0 transition-all duration-500"
-                    />
+          {related.length > 0 && (
+            <div className="mt-16">
+              <div className="flex items-end justify-between mb-8 border-b-2 border-deep-navy pb-4">
+                <h2 className="text-headline-md font-bold uppercase tracking-tight text-deep-navy">You May Also Like</h2>
+                {product.type && (
+                  <Link
+                    href={`/search?category=${encodeURIComponent(product.type)}`}
+                    className="text-sm font-bold uppercase text-on-surface-variant hover:text-primary transition-colors"
+                  >
+                    View All →
                   </Link>
-                  <div className="p-5 flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-bold text-deep-navy">{prod.name}</h3>
-                      <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant mt-0.5">{prod.price}</p>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                {related.map((prod, i) => (
+                  <motion.div
+                    key={prod.id}
+                    initial={{ opacity: 0, y: 14 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.07, duration: 0.35, ease: EASE }}
+                    className="group border border-deep-navy rounded-2xl overflow-hidden bg-white card-hover"
+                  >
+                    <Link href={`/products/${prod.id}`} className="block aspect-square border-b border-deep-navy/20 bg-surface-container-low p-8">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={prod.image}
+                        alt={prod.name}
+                        className="w-full h-full object-contain grayscale group-hover:grayscale-0 transition-all duration-500"
+                      />
+                    </Link>
+                    <div className="p-5 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-deep-navy line-clamp-1">{prod.name}</h3>
+                        <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant mt-0.5">
+                          {formatVND(prod.price)}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/products/${prod.id}`}
+                        className="h-9 px-4 bg-primary-container text-deep-navy text-xs font-bold rounded-xl border-2 border-transparent hover:border-deep-navy transition-colors active:scale-[0.97] flex items-center"
+                      >
+                        View
+                      </Link>
                     </div>
-                    <button className="h-9 px-4 bg-primary-container text-deep-navy text-xs font-bold rounded-xl border-2 border-transparent hover:border-deep-navy transition-colors active:scale-[0.97]">
-                      Add
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </main>
 
       <Footer />
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="p-5 bg-white border border-deep-navy/20 rounded-xl">
+      <dt className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">{label}</dt>
+      <dd className="mt-1.5 text-sm text-deep-navy">{value}</dd>
     </div>
   );
 }
