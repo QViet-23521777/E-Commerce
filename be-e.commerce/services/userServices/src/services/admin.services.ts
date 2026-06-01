@@ -88,10 +88,35 @@ export const adminLogin = async (email: string, password: string) => {
   if (role?.name !== "admin" && role?.name !== "superadmin") {
     throw new Error("NOT_AN_ADMIN");
   }
+
+  // Per-account 2FA toggle. When disabled, mint the token pair here (the OTP
+  // step is where admin tokens are normally generated) so the client can sign
+  // in directly. Legacy admins without the field read as `true` (mandatory 2FA).
+  const twoFactorEnabled = user.twoFactorEnabled !== false;
+  if (!twoFactorEnabled) {
+    user.otp = undefined;
+    const tokens = await JwtService.generateTokenPair({
+      userId: user._id.toString(),
+      email: user.email,
+      role: role.name,
+    });
+    user.refreshToken = tokens.refreshToken;
+    await user.save();
+    return { user, otp: null, twoFactorEnabled, tokens, role: role.name };
+  }
+
   const otp = randomInt(100000, 1000000).toString();
   user.otp = createHash("sha256").update(otp).digest("hex");
   await user.save();
-  return { user, otp };
+  return {
+    user,
+    otp,
+    twoFactorEnabled,
+    tokens: null as null | Awaited<
+      ReturnType<typeof JwtService.generateTokenPair>
+    >,
+    role: role.name,
+  };
 };
 
 export const adminSecondFactorAuth = async (userId: string, otp: string) => {

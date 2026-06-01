@@ -104,7 +104,10 @@ export interface CreateProductInput {
   quantity: number; // initial stock; must be >= 1 (backend rejects 0 on create)
   point?: number;
   sale?: number;
-  image: File;
+  // Image is optional: supply an uploaded file OR a direct image URL. When
+  // neither is given, the backend stores a placeholder.
+  image?: File;
+  imageUrl?: string;
 }
 
 interface CreateProductResponse {
@@ -128,7 +131,8 @@ export async function createListing(
   form.append("type", input.type);
   if (input.point !== undefined) form.append("point", String(input.point));
   if (input.sale !== undefined) form.append("sale", String(input.sale));
-  form.append("image", input.image);
+  if (input.image) form.append("image", input.image);
+  if (input.imageUrl?.trim()) form.append("imageUrl", input.imageUrl.trim());
 
   const token = getAccessToken();
   // Don't set Content-Type — the browser adds the multipart boundary itself.

@@ -28,12 +28,15 @@ const fadeUp = {
 
 export default function CategorySection({ title, slug, products }: CategorySectionProps) {
   return (
-    <div className="border-2 border-deep-navy rounded-2xl overflow-hidden bg-white">
-      {/* Category header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b-2 border-deep-navy bg-surface-container-low">
-        <h2 className="text-headline-md font-bold text-deep-navy uppercase tracking-tight">
-          {title}
-        </h2>
+    <div>
+      {/* Category header — matches page-level section heading style */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="h-px w-8 bg-primary flex-shrink-0" />
+          <h2 className="text-headline-md font-bold text-deep-navy uppercase tracking-tight">
+            {title}
+          </h2>
+        </div>
         <Link
           href={`/search?category=${slug}`}
           className="flex items-center gap-1.5 text-sm font-bold text-primary hover:text-deep-navy transition-colors"
@@ -42,20 +45,16 @@ export default function CategorySection({ title, slug, products }: CategorySecti
         </Link>
       </div>
 
-      {/* Product grid — separated by 1px lines for a structured look */}
+      {/* Product grid with breathing room between cards */}
       <motion.div
         variants={stagger}
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "-60px" }}
-        className="grid grid-cols-2 md:grid-cols-4"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
       >
-        {products.slice(0, 4).map((product, i) => (
-          <motion.div
-            key={product.id}
-            variants={fadeUp}
-            className={`bg-white ${i < 3 ? "border-r border-deep-navy/10" : ""}`}
-          >
+        {products.slice(0, 4).map((product) => (
+          <motion.div key={product.id} variants={fadeUp}>
             <ProductCard {...product} />
           </motion.div>
         ))}

@@ -15,6 +15,16 @@ export interface BackendProduct {
   updatedAt?: string;
   status?: "pending" | "approved" | "rejected";
   rejectionReason?: string;
+  rating?: number;
+  numReviews?: number;
+  reviews?: ProductReview[];
+}
+
+export interface ProductReview {
+  author: string;
+  rating: number;
+  text: string;
+  date: string;
 }
 
 export interface UIProduct {
@@ -30,6 +40,9 @@ export interface UIProduct {
   point?: number;
   numPurchases?: number;
   salePercent?: number;
+  rating?: number;
+  numReviews?: number;
+  reviews?: ProductReview[];
 }
 
 const FALLBACK_IMG =
@@ -52,6 +65,9 @@ export function toUIProduct(p: BackendProduct): UIProduct {
     point: p.point,
     numPurchases: p.numPurchases,
     salePercent: salePct,
+    rating: p.rating,
+    numReviews: p.numReviews,
+    reviews: p.reviews,
     tag:
       salePct >= 30
         ? "Sale"
@@ -190,6 +206,7 @@ export async function fetchInventoryByName(
 
 export interface ShopOfProduct {
   sellerId: string;
+  inventoryId?: string;
   productCount: number;
   unitsSold: number;
 }

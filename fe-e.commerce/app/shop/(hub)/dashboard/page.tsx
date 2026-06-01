@@ -15,43 +15,20 @@ import {
   Truck,
 } from "lucide-react";
 import Link from "next/link";
+import { useState, useEffect } from "react";
+import { getUser } from "@/lib/auth";
+import { fetchSellerInventory, type InventoryItem } from "@/lib/seller";
+import type { BackendProduct } from "@/lib/products";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-const STATS = [
-  {
-    label: "Revenue This Month",
-    value: "$12,480",
-    sub: "+18.2% vs last month",
-    up: true,
-    icon: TrendingUp,
-    accent: "text-green-600",
-  },
-  {
-    label: "Pending Orders",
-    value: "8",
-    sub: "2 require confirmation",
-    up: false,
-    icon: ShoppingBag,
-    accent: "text-amber-600",
-  },
-  {
-    label: "Products Listed",
-    value: "47",
-    sub: "3 pending approval",
-    up: false,
-    icon: Package,
-    accent: "text-on-surface-variant",
-  },
-  {
-    label: "Average Rating",
-    value: "4.9",
-    sub: "128 reviews total",
-    up: true,
-    icon: Star,
-    accent: "text-primary",
-  },
-];
+const LOW_STOCK_THRESHOLD = 5;
+
+interface LowStockEntry {
+  id: string;
+  name: string;
+  stock: number;
+}
 
 const MONTHLY_REVENUE = [
   { month: "Jun", value: 6800 },
@@ -106,12 +83,6 @@ const RECENT_ORDERS = [
   },
 ];
 
-const LOW_STOCK = [
-  { name: "V60 Ceramic Dripper", sku: "SKU-001", stock: 2 },
-  { name: "Task Lamp T-1", sku: "SKU-019", stock: 4 },
-  { name: "Copper Pour-Over Set", sku: "SKU-008", stock: 1 },
-];
-
 const STATUS_META: Record<
   string,
   { color: string; icon: React.ElementType }
@@ -141,6 +112,77 @@ const today = new Date().toLocaleDateString("en-US", {
 });
 
 export default function DashboardPage() {
+  const [productCount, setProductCount] = useState<number | null>(null);
+  const [lowStock, setLowStock] = useState<LowStockEntry[]>([]);
+  const [invLoading, setInvLoading] = useState(true);
+
+  useEffect(() => {
+    const u = getUser();
+    if (!u?.userId) { setInvLoading(false); return; }
+    let alive = true;
+    (async () => {
+      try {
+        const inv = await fetchSellerInventory(u.userId);
+        if (!alive) return;
+        setProductCount(inv.length);
+        const low = inv
+          .filter((i: InventoryItem) => (i.quantity ?? 0) <= LOW_STOCK_THRESHOLD)
+          .sort((a, b) => (a.quantity ?? 0) - (b.quantity ?? 0))
+          .slice(0, 6)
+          .map((i: InventoryItem) => {
+            const p =
+              typeof i.productId === "object" && i.productId
+                ? (i.productId as BackendProduct)
+                : null;
+            return {
+              id: i._id,
+              name: p?.name || i.name || "Product",
+              stock: i.quantity ?? 0,
+            };
+          });
+        setLowStock(low);
+      } finally {
+        if (alive) setInvLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const STATS = [
+    {
+      label: "Revenue This Month",
+      value: "$12,480",
+      sub: "+18.2% vs last month",
+      up: true,
+      icon: TrendingUp,
+      accent: "text-green-600",
+    },
+    {
+      label: "Pending Orders",
+      value: "8",
+      sub: "2 require confirmation",
+      up: false,
+      icon: ShoppingBag,
+      accent: "text-amber-600",
+    },
+    {
+      label: "Products Listed",
+      value: productCount === null ? "…" : String(productCount),
+      sub: `${lowStock.length} low on stock`,
+      up: false,
+      icon: Package,
+      accent: "text-on-surface-variant",
+    },
+    {
+      label: "Average Rating",
+      value: "4.9",
+      sub: "128 reviews total",
+      up: true,
+      icon: Star,
+      accent: "text-primary",
+    },
+  ];
+
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto w-full">
       {/* Header */}
@@ -268,30 +310,38 @@ export default function DashboardPage() {
           </div>
 
           <div className="space-y-3.5">
-            {LOW_STOCK.map((item) => (
-              <div
-                key={item.sku}
-                className="flex items-center justify-between gap-3 py-2 border-b border-outline-variant last:border-0 last:pb-0"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-deep-navy truncate">
-                    {item.name}
-                  </p>
-                  <p className="text-[10px] text-on-surface-variant font-mono">
-                    {item.sku}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full border ${
-                    item.stock <= 2
-                      ? "bg-red-50 text-red-700 border-red-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
-                  }`}
+            {invLoading ? (
+              <p className="text-sm text-on-surface-variant py-4">Loading…</p>
+            ) : lowStock.length === 0 ? (
+              <p className="text-sm text-on-surface-variant py-4">
+                All products are well stocked.
+              </p>
+            ) : (
+              lowStock.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 py-2 border-b border-outline-variant last:border-0 last:pb-0"
                 >
-                  {item.stock} left
-                </span>
-              </div>
-            ))}
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-deep-navy truncate capitalize">
+                      {item.name}
+                    </p>
+                    <p className="text-[10px] text-on-surface-variant font-mono">
+                      {item.id.slice(-8)}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full border ${
+                      item.stock <= 2
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}
+                  >
+                    {item.stock === 0 ? "Out" : `${item.stock} left`}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
 
           <Link

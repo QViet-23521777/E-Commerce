@@ -9,11 +9,21 @@ export const Request = async (
 ) => {
   try {
     const isBodyMethod = ["POST", "PUT", "PATCH"].includes(method);
-    let body: string | undefined = undefined;
+    const reqContentType = c.req.header("content-type") || "";
+    const isBinaryBody =
+      reqContentType.includes("multipart/form-data") ||
+      reqContentType.includes("application/octet-stream");
+    let body: string | ArrayBuffer | undefined = undefined;
     if (isBodyMethod) {
       const cloned = c.req.raw.clone();
-      const text = await cloned.text();
-      body = text.trim() ? text : undefined;
+      if (isBinaryBody) {
+        // Forward the raw bytes untouched so file uploads (multipart) survive.
+        const buf = await cloned.arrayBuffer();
+        body = buf.byteLength ? buf : undefined;
+      } else {
+        const text = await cloned.text();
+        body = text.trim() ? text : undefined;
+      }
     }
     const targetUrl = url;
 

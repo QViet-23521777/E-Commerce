@@ -10,9 +10,9 @@ import {
   ChevronRight,
   CheckCircle2,
   UserPlus,
-  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
+import TwoFactorToggle from "@/components/TwoFactorToggle";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -278,6 +278,16 @@ export default function AdminDashboardPage() {
             </tbody>
           </table>
         </div>
+      </motion.div>
+
+      {/* Security — admin's own login 2FA toggle */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: EASE, delay: 0.4 }}
+        className="mt-5 max-w-xl"
+      >
+        <TwoFactorToggle />
       </motion.div>
     </div>
   );

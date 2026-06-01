@@ -62,14 +62,13 @@
   --color-neon-cyan: #6ff6ff;
   --color-ice-blue: #d0e6ee;
 
-  /* Named spacing tokens */
-  --spacing-xs: 4px;
+  /* Named spacing tokens.
+     NOTE: keys xs/sm/md/lg/xl are intentionally NOT defined here. In Tailwind
+     v4 a `--spacing-<key>` token shadows the `max-w-/w-/min-w-` t-shirt sizes,
+     which made `max-w-sm` resolve to 8px (etc.) and collapsed any container
+     using them to ~min-content. Only uniquely-named tokens live here. */
   --spacing-unit: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
   --spacing-gutter: 24px;
-  --spacing-xl: 48px;
   --spacing-margin-desktop: 40px;
   --spacing-margin-mobile: 16px;
 

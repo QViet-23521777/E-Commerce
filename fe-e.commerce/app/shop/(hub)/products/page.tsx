@@ -108,7 +108,9 @@ interface DrawerState {
   description: string;
   price: string;
   stock: string;
+  imageMode: "upload" | "url";
   imageFile: File | null;
+  imageUrl: string;
   imagePreview: string;
 }
 
@@ -119,7 +121,9 @@ const EMPTY_DRAWER: DrawerState = {
   description: "",
   price: "",
   stock: "",
+  imageMode: "upload",
   imageFile: null,
+  imageUrl: "",
   imagePreview: "",
 };
 
@@ -179,7 +183,9 @@ export default function ProductsPage() {
       description: r.description,
       price: String(r.price),
       stock: String(r.stock),
+      imageMode: "upload",
       imageFile: null,
+      imageUrl: "",
       imagePreview: r.image,
     });
     setDrawerError("");
@@ -194,6 +200,22 @@ export default function ProductsPage() {
     }
     const preview = URL.createObjectURL(file);
     setDrawer((d) => ({ ...d, imageFile: file, imagePreview: preview }));
+  }
+
+  function onPickImageUrl(url: string) {
+    // Live-preview the pasted URL; the <img> onError handles bad links.
+    setDrawer((d) => ({ ...d, imageUrl: url, imagePreview: url.trim() }));
+  }
+
+  function setImageMode(mode: "upload" | "url") {
+    // Switching source clears the other source's preview to avoid confusion.
+    setDrawer((d) => ({
+      ...d,
+      imageMode: mode,
+      imageFile: null,
+      imageUrl: "",
+      imagePreview: mode === "url" ? "" : "",
+    }));
   }
 
   async function handleSaveDrawer() {
@@ -229,7 +251,12 @@ export default function ProductsPage() {
     if (!drawer.description.trim()) { setDrawerError("Description is required."); return; }
     if (isNaN(price) || price <= 0) { setDrawerError("Enter a valid price."); return; }
     if (isNaN(stock) || stock < 1) { setDrawerError("Initial stock must be at least 1."); return; }
-    if (!drawer.imageFile) { setDrawerError("A product image is required."); return; }
+    // Image is optional. If the URL mode is used with a non-empty value, sanity-check it.
+    const trimmedUrl = drawer.imageUrl.trim();
+    if (drawer.imageMode === "url" && trimmedUrl && !/^https?:\/\//i.test(trimmedUrl)) {
+      setDrawerError("Image URL must start with http:// or https://.");
+      return;
+    }
 
     setDrawerSaving(true);
     try {
@@ -239,7 +266,8 @@ export default function ProductsPage() {
         price,
         type: drawer.category,
         quantity: stock,
-        image: drawer.imageFile,
+        image: drawer.imageMode === "upload" ? drawer.imageFile ?? undefined : undefined,
+        imageUrl: drawer.imageMode === "url" ? trimmedUrl || undefined : undefined,
       });
       setDrawerSaved(true);
       await load(sellerId);
@@ -642,30 +670,65 @@ export default function ProductsPage() {
                 {/* Image */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2.5">
-                    Product Image {drawer.mode === "create" && "*"}
+                    Product Image
                   </label>
-                  <div className="flex gap-3 items-center">
+                  <div className="flex gap-3 items-start">
                     <div className="w-20 h-20 rounded-xl border-2 border-deep-navy/20 overflow-hidden shrink-0 bg-surface-container-low flex items-center justify-center">
                       {drawer.imagePreview ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={drawer.imagePreview} alt="preview" className="w-full h-full object-cover" />
+                        <img
+                          src={drawer.imagePreview}
+                          alt="preview"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = FALLBACK_IMG;
+                          }}
+                        />
                       ) : (
                         <Camera className="w-5 h-5 text-outline" />
                       )}
                     </div>
-                    {drawer.mode === "create" && (
-                      <label className="flex-1">
-                        <span className="block text-xs text-on-surface-variant mb-1.5">
-                          PNG/JPG, uploaded to the product catalogue.
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => onPickImage(e.target.files?.[0] ?? null)}
-                          className="block w-full text-xs text-on-surface file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-2 file:border-deep-navy file:bg-white file:text-xs file:font-bold file:text-deep-navy hover:file:bg-surface-container cursor-pointer"
-                        />
-                      </label>
-                    )}
+                    {drawer.mode === "create" ? (
+                      <div className="flex-1 space-y-2.5">
+                        {/* Source toggle */}
+                        <div className="flex gap-0.5 bg-surface-container-low border-2 border-deep-navy/20 rounded-lg p-0.5">
+                          {(["upload", "url"] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setImageMode(m)}
+                              className={`flex-1 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-md transition-colors ${
+                                drawer.imageMode === m
+                                  ? "bg-primary-container text-deep-navy"
+                                  : "text-on-surface-variant hover:text-deep-navy"
+                              }`}
+                            >
+                              {m === "upload" ? "Upload" : "Image URL"}
+                            </button>
+                          ))}
+                        </div>
+
+                        {drawer.imageMode === "upload" ? (
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => onPickImage(e.target.files?.[0] ?? null)}
+                            className="block w-full text-xs text-on-surface file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-2 file:border-deep-navy file:bg-white file:text-xs file:font-bold file:text-deep-navy hover:file:bg-surface-container cursor-pointer"
+                          />
+                        ) : (
+                          <input
+                            type="url"
+                            value={drawer.imageUrl}
+                            onChange={(e) => onPickImageUrl(e.target.value)}
+                            placeholder="https://example.com/photo.jpg"
+                            className="block w-full h-10 px-3 border-2 border-deep-navy/20 rounded-lg bg-white text-xs text-on-surface placeholder:text-outline focus:border-primary-container outline-none transition-colors"
+                          />
+                        )}
+                        <p className="text-[11px] text-on-surface-variant leading-snug">
+                          Optional — a placeholder is used if left empty.
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

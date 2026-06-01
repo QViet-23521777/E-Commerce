@@ -93,13 +93,18 @@ export const verifyEmail = async (c: Context) => {
 export const login = async (c: Context) => {
   try {
     const { email, password } = await c.req.json();
-    const { user, tokens, otp } = await loginUser({ email, password });
-    mailClient.sendLoginEmail(
-      user.email,
-      user.name,
-      otp,
-      new Date(Date.now() + 300000).toISOString(),
-    ).catch(() => {});
+    const { user, tokens, otp, twoFactorEnabled } = await loginUser({
+      email,
+      password,
+    });
+    if (twoFactorEnabled && otp) {
+      mailClient.sendLoginEmail(
+        user.email,
+        user.name,
+        otp,
+        new Date(Date.now() + 300000).toISOString(),
+      ).catch(() => {});
+    }
     return c.json(
       {
         success: true,
@@ -108,6 +113,7 @@ export const login = async (c: Context) => {
           id: user._id,
           name: user.name,
           email: user.email,
+          twoFactorEnabled,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         },
@@ -197,6 +203,7 @@ export const profile = async (c: Context) => {
           id: userData._id,
           name: userData.name,
           email: userData.email,
+          twoFactorEnabled: userData.twoFactorEnabled !== false,
           createdAt: userData.createdAt,
           updatedAt: userData.updatedAt,
         },
@@ -237,8 +244,12 @@ export const updateProfile = async (c: Context) => {
     if (!user)
       return c.json({ success: false, message: "User not authenticated" }, 401);
 
-    const { name, walletId } = await c.req.json();
-    const userData = await updateUserProfile(user.id, { name, walletId });
+    const { name, walletId, twoFactorEnabled } = await c.req.json();
+    const userData = await updateUserProfile(user.id, {
+      name,
+      walletId,
+      twoFactorEnabled,
+    });
 
     return c.json(
       {
@@ -248,6 +259,7 @@ export const updateProfile = async (c: Context) => {
           id: userData._id,
           name: userData.name,
           email: userData.email,
+          twoFactorEnabled: userData.twoFactorEnabled !== false,
           createdAt: userData.createdAt,
           updatedAt: userData.updatedAt,
         },

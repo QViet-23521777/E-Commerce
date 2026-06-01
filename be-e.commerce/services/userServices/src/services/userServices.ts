@@ -20,6 +20,7 @@ export interface LoginInput {
 export interface UpdateProfileInput {
   name?: string;
   walletId?: string;
+  twoFactorEnabled?: boolean;
 }
 
 export const registerUser = async ({
@@ -74,11 +75,20 @@ export const loginUser = async ({ email, password }: LoginInput) => {
     role: roleName,
   });
   user.refreshToken = tokens.refreshToken;
-  const otp = randomInt(100000, 1000000).toString();
-  user.otp = createHash("sha256").update(otp).digest("hex");
+
+  // Honor the per-account toggle. Legacy users without the field read as `true`
+  // via the schema default, so 2FA stays mandatory unless explicitly turned off.
+  const twoFactorEnabled = user.twoFactorEnabled !== false;
+  let otp: string | null = null;
+  if (twoFactorEnabled) {
+    otp = randomInt(100000, 1000000).toString();
+    user.otp = createHash("sha256").update(otp).digest("hex");
+  } else {
+    user.otp = undefined;
+  }
   await user.save();
 
-  return { user, tokens, otp };
+  return { user, tokens, otp, twoFactorEnabled };
 };
 
 export const SecondFactorAuth = async (userId: string, otp: string) => {
@@ -179,12 +189,14 @@ export const getUserByToken = async (token: string) => {
 
 export const updateUserProfile = async (
   userId: string,
-  { name, walletId }: UpdateProfileInput,
+  { name, walletId, twoFactorEnabled }: UpdateProfileInput,
 ) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("USER_NOT_FOUND");
 
   if (name) user.name = name;
+  if (typeof twoFactorEnabled === "boolean")
+    user.twoFactorEnabled = twoFactorEnabled;
 
   // Sửa bug — cập nhật walletId đúng cách
   const userProfile = await UserProfile.findOne({ userId: user._id });

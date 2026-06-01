@@ -19,22 +19,30 @@ export const handleCreateProduct = async (c: Context) => {
   try {
     const body = await c.req.parseBody();
     const { name, description, price, type, point, sale, numPurchases } = body;
-    const file = body["image"] as File;
+    // Image is optional: either an uploaded file or a pasted image URL.
+    const file = body["image"] as File | undefined;
+    const imageUrl = body["imageUrl"];
 
-    if (!name || !description || !price || !type || !file) {
+    if (!name || !description || !price || !type) {
       return c.json(
         { success: false, message: "Thiếu thông tin bắt buộc" },
         400,
       );
     }
 
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const fileBuffer =
+      file && typeof file !== "string"
+        ? Buffer.from(await file.arrayBuffer())
+        : undefined;
 
     const product = await createProduct(
       name as string,
       description as string,
       Number(price),
-      fileBuffer,
+      {
+        fileBuffer,
+        imageUrl: typeof imageUrl === "string" ? imageUrl : undefined,
+      },
       type as string,
       point ? Number(point) : 0,
       sale ? Number(sale) : undefined,

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { PaymentModel } from "../models/payment.model";
+import { IPayment, PaymentModel } from "../models/payment.model";
 import {
   createMomoPayment,
   getMomoPartnerCode,
@@ -12,6 +12,14 @@ type CreatePaymentItemInput = {
   quantity: number;
 };
 
+type ShippingAddressInput = {
+  fullName?: string;
+  phone?: string;
+  line1?: string;
+  city?: string;
+  zip?: string;
+};
+
 type CreatePaymentInput = {
   amount?: number;
   orderInfo?: string;
@@ -19,15 +27,20 @@ type CreatePaymentInput = {
   extraData?: string;
   lang?: string;
   items?: CreatePaymentItemInput[];
+  shippingAddress?: ShippingAddressInput;
+  shippingMethod?: string;
 };
 
 type ProductSnapshot = {
   _id: string;
   name: string;
   quantity: number;
+  sellerId?: string;
   productId: {
+    _id?: string;
     price: number;
     name: string;
+    imageUrl?: string;
   };
 };
 
@@ -191,6 +204,11 @@ const resolveItemsAndAmount = async (payload: CreatePaymentInput) => {
       quantity: item.quantity,
       unitPrice,
       totalPrice,
+      sellerId: goods.sellerId ? String(goods.sellerId) : null,
+      image: goods.productId?.imageUrl ?? null,
+      catalogProductId: goods.productId?._id
+        ? String(goods.productId._id)
+        : null,
     };
   });
 
@@ -226,9 +244,14 @@ const normalizePaymentResponse = (payment: any) => ({
   orderId: payment.orderId,
   requestId: payment.requestId,
   userId: payment.userId,
+  partnerCode: payment.partnerCode,
   amount: payment.amount,
   status: payment.status,
+  fulfillmentStatus: payment.fulfillmentStatus,
   orderInfo: payment.orderInfo,
+  shippingAddress: payment.shippingAddress,
+  shippingMethod: payment.shippingMethod,
+  trackingNo: payment.trackingNo,
   payUrl: payment.payUrl,
   deeplink: payment.deeplink,
   qrCodeUrl: payment.qrCodeUrl,
@@ -240,7 +263,24 @@ const normalizePaymentResponse = (payment: any) => ({
   updatedAt: payment.updatedAt,
   paidAt: payment.paidAt,
   failedAt: payment.failedAt,
+  cancelledAt: payment.cancelledAt,
+  refundedAt: payment.refundedAt,
 });
+
+// Normalize an order for a specific seller — project only that seller's items
+// and compute a per-seller subtotal so a multi-seller order surfaces only the
+// relevant lines to each shop.
+const normalizeSellerOrder = (payment: any, sellerId: string) => {
+  const base = normalizePaymentResponse(payment);
+  const sellerItems = (payment.items || []).filter(
+    (i: { sellerId?: string }) => String(i.sellerId) === String(sellerId),
+  );
+  const sellerSubtotal = sellerItems.reduce(
+    (sum: number, i: { totalPrice: number }) => sum + (i.totalPrice || 0),
+    0,
+  );
+  return { ...base, items: sellerItems, sellerSubtotal };
+};
 
 // ==================== MOMO ====================
 
@@ -279,6 +319,9 @@ export const createMomoPaymentSession = async (
     requestType,
     orderInfo,
     status: "pending",
+    fulfillmentStatus: "to_confirm",
+    shippingAddress: payload.shippingAddress || null,
+    shippingMethod: payload.shippingMethod || null,
     redirectUrl,
     ipnUrl,
     extraData: "",
@@ -428,6 +471,7 @@ export const processMomoIpn = async (payload: any) => {
     }
 
     payment.status = "paid";
+    payment.fulfillmentStatus = "to_confirm";
     payment.paidAt = new Date();
     payment.failedAt = null;
   } else {
@@ -461,22 +505,27 @@ export const checkoutWithWallet = async (
   await debitWallet(userId, amount);
   console.log("[checkoutWithWallet] wallet debited");
 
-  // Trừ tồn kho
-  console.log("[checkoutWithWallet] buying inventory...");
-  try {
-    await buyInventoryByList(
-      items.map((item) => ({
-        inventoryId: item.productId,
-        quantity: item.quantity,
-      })),
-    );
-    console.log("[checkoutWithWallet] inventory bought");
-    await recordBuyActivities(userId, items);
-  } catch (error) {
-    // Tồn kho thất bại → hoàn tiền lại ví
-    console.log("[checkoutWithWallet] inventory failed, refunding wallet...");
-    await creditWallet(userId, amount);
-    throw error;
+  // Trừ tồn kho — chỉ khi có items cụ thể. Thanh toán theo `amount` (giỏ hàng
+  // chưa gắn inventoryId thật) thì bỏ qua, giống nhánh IPN của MoMo.
+  if (items.length > 0) {
+    console.log("[checkoutWithWallet] buying inventory...");
+    try {
+      await buyInventoryByList(
+        items.map((item) => ({
+          inventoryId: item.productId,
+          quantity: item.quantity,
+        })),
+      );
+      console.log("[checkoutWithWallet] inventory bought");
+      await recordBuyActivities(userId, items);
+    } catch (error) {
+      // Tồn kho thất bại → hoàn tiền lại ví
+      console.log("[checkoutWithWallet] inventory failed, refunding wallet...");
+      await creditWallet(userId, amount);
+      throw error;
+    }
+  } else {
+    console.log("[checkoutWithWallet] amount-only checkout, skipping inventory");
   }
 
   // Tạo payment record đã paid
@@ -490,8 +539,13 @@ export const checkoutWithWallet = async (
     requestType: "wallet",
     orderInfo,
     status: "paid",
-    redirectUrl: "",
-    ipnUrl: "",
+    fulfillmentStatus: "to_confirm",
+    shippingAddress: payload.shippingAddress || null,
+    shippingMethod: payload.shippingMethod || null,
+    // schema marks these required (empty string fails validation); wallet
+    // payments have no MoMo redirect/ipn, so use a sentinel.
+    redirectUrl: "wallet",
+    ipnUrl: "wallet",
     extraData: "",
     items,
     resultCode: 0,
@@ -514,6 +568,168 @@ export const getPaymentForUser = async (orderId: string, userId: string) => {
   if (!payment) {
     throw new Error("Payment not found");
   }
+
+  return normalizePaymentResponse(payment);
+};
+
+// ==================== ORDERS (buyer + seller) ====================
+
+type ListOrdersOptions = {
+  status?: string;
+  limit?: number;
+};
+
+const FULFILLMENT_FLOW: Record<string, string> = {
+  confirm: "processing",
+  ship: "shipped",
+  deliver: "delivered",
+};
+
+const REQUIRED_PRIOR_STATUS: Record<string, string> = {
+  confirm: "to_confirm",
+  ship: "processing",
+  deliver: "shipped",
+};
+
+export const listOrdersForBuyer = async (
+  userId: string,
+  options: ListOrdersOptions = {},
+) => {
+  const { status, limit = 20 } = options;
+  const query: Record<string, unknown> = { userId };
+  if (status) query.fulfillmentStatus = status;
+
+  const payments = await PaymentModel.find(query)
+    .sort({ createdAt: -1 })
+    .limit(Math.min(Number(limit) || 20, 100));
+
+  return payments.map(normalizePaymentResponse);
+};
+
+export const listOrdersForSeller = async (
+  sellerId: string,
+  options: ListOrdersOptions = {},
+) => {
+  const { status } = options;
+  const query: Record<string, unknown> = {
+    "items.sellerId": sellerId,
+    status: "paid",
+  };
+  if (status) query.fulfillmentStatus = status;
+
+  const payments = await PaymentModel.find(query).sort({ createdAt: -1 });
+
+  return payments.map((p) => normalizeSellerOrder(p, sellerId));
+};
+
+export const getSellerOrderById = async (
+  orderId: string,
+  sellerId: string,
+) => {
+  const payment = await PaymentModel.findOne({ orderId });
+  if (!payment) {
+    throw new Error("Payment not found");
+  }
+
+  const ownsItem = (payment.items || []).some(
+    (i: { sellerId?: string }) => String(i.sellerId) === String(sellerId),
+  );
+  if (!ownsItem) {
+    throw new Error("Payment not found");
+  }
+
+  return normalizeSellerOrder(payment, sellerId);
+};
+
+export const advanceFulfillment = async (
+  orderId: string,
+  sellerId: string,
+  action: "confirm" | "ship" | "deliver",
+  trackingNo?: string,
+) => {
+  const nextStatus = FULFILLMENT_FLOW[action];
+  if (!nextStatus) {
+    throw new Error("Invalid fulfillment action");
+  }
+
+  const payment = await PaymentModel.findOne({ orderId });
+  if (!payment) {
+    throw new Error("Payment not found");
+  }
+
+  const ownsItem = (payment.items || []).some(
+    (i: { sellerId?: string }) => String(i.sellerId) === String(sellerId),
+  );
+  if (!ownsItem) {
+    throw new Error("Payment not found");
+  }
+
+  if (payment.status !== "paid") {
+    throw new Error("Order is not paid");
+  }
+
+  if (payment.fulfillmentStatus === "cancelled") {
+    throw new Error("Order is cancelled");
+  }
+
+  if (payment.fulfillmentStatus !== REQUIRED_PRIOR_STATUS[action]) {
+    throw new Error(
+      `Cannot ${action} an order in status "${payment.fulfillmentStatus}"`,
+    );
+  }
+
+  payment.fulfillmentStatus = nextStatus as IPayment["fulfillmentStatus"];
+  if (action === "ship" && trackingNo) {
+    payment.trackingNo = trackingNo;
+  }
+
+  await payment.save();
+  return normalizeSellerOrder(payment, sellerId);
+};
+
+export const cancelOrder = async (orderId: string, actorId: string) => {
+  const payment = await PaymentModel.findOne({ orderId });
+  if (!payment) {
+    throw new Error("Payment not found");
+  }
+
+  const isBuyer = String(payment.userId) === String(actorId);
+  const isSeller = (payment.items || []).some(
+    (i: { sellerId?: string }) => String(i.sellerId) === String(actorId),
+  );
+  if (!isBuyer && !isSeller) {
+    throw new Error("Payment not found");
+  }
+
+  // Idempotent — a second cancel is a no-op.
+  if (payment.fulfillmentStatus === "cancelled") {
+    return normalizePaymentResponse(payment);
+  }
+
+  if (!["to_confirm", "processing"].includes(payment.fulfillmentStatus)) {
+    throw new Error(
+      `Cannot cancel an order that is already "${payment.fulfillmentStatus}"`,
+    );
+  }
+
+  // Refund + restore only for a paid wallet order. MoMo refunds are out of scope.
+  if (payment.status === "paid" && payment.partnerCode === "WALLET") {
+    if (payment.items && payment.items.length > 0) {
+      await restoreInventoryByList(
+        payment.items.map((item: { productId: string; quantity: number }) => ({
+          inventoryId: item.productId,
+          quantity: item.quantity,
+        })),
+      );
+    }
+    await creditWallet(payment.userId, payment.amount);
+    payment.refundedAt = new Date();
+  }
+  // TODO MoMo refund — out of scope for v1 (only wallet refunds are automated).
+
+  payment.fulfillmentStatus = "cancelled";
+  payment.cancelledAt = new Date();
+  await payment.save();
 
   return normalizePaymentResponse(payment);
 };

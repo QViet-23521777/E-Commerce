@@ -11,7 +11,9 @@ services:
       - inventory-service
       - activity-service
       - payment-service
+      - promotion-service
       - mail-service
+      - chat-service
     networks:
       - ecommerce-net
     restart: on-failure
@@ -69,6 +71,21 @@ services:
       - ./services/activityServices/src:/app/src
     command: npm run dev
 
+  chat-service:
+    build: ./services/chatServices
+    container_name: ecommerce-chat-service
+    ports:
+      - "3007:3007"
+    env_file: ./services/chatServices/.env.docker
+    depends_on:
+      - mongodb
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/chatServices/src:/app/src
+    command: npm run dev
+
   payment-service:
     build: ./services/paymentServices
     image: paymentservices:latest
@@ -83,6 +100,21 @@ services:
     restart: on-failure
     volumes:
       - ./services/paymentServices/src:/app/src
+    command: npm run dev
+
+  promotion-service:
+    build: ./services/promotionServices
+    container_name: ecommerce-promotion-service
+    ports:
+      - "3006:3006"
+    env_file: ./services/promotionServices/.env.docker
+    depends_on:
+      - mongodb
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/promotionServices/src:/app/src
     command: npm run dev
 
   mail-service:

@@ -13,6 +13,7 @@ export interface User extends Document {
   Token?: string;
   TokenExpiredAt?: Date;
   otp?: string;
+  twoFactorEnabled: boolean;
 }
 
 const UserSchema: Schema = new Schema(
@@ -28,6 +29,9 @@ const UserSchema: Schema = new Schema(
     Token: { type: String },
     TokenExpiredAt: { type: Date },
     otp: { type: String },
+    // When false, login skips the emailed OTP step (second-factor). Default true
+    // preserves the existing mandatory-2FA behavior for every existing account.
+    twoFactorEnabled: { type: Boolean, default: true },
   },
   {
     timestamps: true,

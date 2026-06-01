@@ -1,14 +1,20 @@
-// ip.whitelist.ts - không cần import env nữa
 import { createMiddleware } from "hono/factory";
+import { getConnInfo } from "@hono/node-server/conninfo";
 
 export const ipWhitelist = createMiddleware(async (c, next) => {
   const ALLOWED_IPS =
     process.env.ADMIN_ALLOWED_IPS?.split(",").map((ip) => ip.trim()) || [];
 
+  let remoteAddr = "";
+  try {
+    const info = getConnInfo(c);
+    remoteAddr = info.remote.address ?? "";
+  } catch { /* not available in this runtime */ }
+
   const clientIP =
     c.req.header("x-forwarded-for")?.split(",")[0].trim() ||
     c.req.header("x-real-ip") ||
-    c.env?.remoteAddr ||
+    remoteAddr ||
     "";
 
   console.log(`Client IP: ${clientIP}`);

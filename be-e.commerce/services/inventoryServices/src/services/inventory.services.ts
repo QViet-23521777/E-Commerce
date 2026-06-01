@@ -128,7 +128,7 @@ export const restoreInventory = async (
 export const findInventoryById = async (inventoryId: string) => {
   const inventory = await Inventory.findById(inventoryId).populate(
     "productId",
-    "price name",
+    "price name imageUrl",
   );
   if (!inventory) {
     throw new Error("Inventory not found");
@@ -182,5 +182,5 @@ export const getShopByProductId = async (productId: string) => {
     const p = it.productId as unknown as { numPurchases?: number } | null;
     return sum + (p?.numPurchases ?? 0);
   }, 0);
-  return { sellerId, productCount, unitsSold };
+  return { sellerId, inventoryId: String(inv._id), productCount, unitsSold };
 };

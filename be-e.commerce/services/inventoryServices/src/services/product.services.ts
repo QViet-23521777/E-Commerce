@@ -16,45 +16,63 @@ const track: {
   point: 10,
 };
 
+// Distinct product ids that at least one shop carries in inventory. Used to keep
+// orphan products (no owning shop) off the public storefront / homepage feeds.
+const getOwnedProductIds = async (): Promise<Types.ObjectId[]> =>
+  Inventory.distinct("productId") as Promise<Types.ObjectId[]>;
+
+// Deterministic placeholder used when no usable image is supplied.
+const placeholderImage = (name: string) =>
+  `https://placehold.co/600x600/eeeeee/001a41?text=${encodeURIComponent(
+    name.slice(0, 20),
+  )}`;
+
+const uploadToCloudinary = (fileBuffer: Buffer) =>
+  new Promise<string>((resolve, reject) => {
+    // Create an upload stream to Cloudinary; the callback fires on success/failure.
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "Product" }, // save to "Product" folder on Cloudinary
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result!.secure_url);
+      },
+    );
+    // Push the file Buffer (received from Multer) into the stream to start uploading
+    stream.end(fileBuffer);
+  });
+
 export const createProduct = async (
   name: string,
   description: string,
   price: number,
-  fileBuffer: Buffer,
+  // Image is optional. Supply an uploaded file (→ Cloudinary) OR a direct image
+  // URL (→ stored verbatim). When neither is usable, a placeholder is used.
+  image: { fileBuffer?: Buffer; imageUrl?: string },
   type: string,
   point: number = 0,
   sale?: number,
   numPurchases?: number,
 ) => {
-  const uploadToCloudinary = () =>
-    new Promise<string>((resolve, reject) => {
-      // Create an upload stream to Cloudinary
-      // The callback is triggered once the upload completes or fails
-      const stream = cloudinary.uploader.upload_stream(
-        { folder: "Product" }, // save to "Product" folder on Cloudinary
-        (error, result) => {
-          if (error)
-            reject(error); // upload failed → reject with error
-          else resolve(result!.secure_url); // upload succeeded → resolve with image URL
-        },
-      );
-      // Push the file Buffer (received from Multer) into the stream to start uploading
-      stream.end(fileBuffer);
-    });
-
-  // Cloudinary is optional: if credentials are missing/invalid (e.g. local dev),
-  // fall back to a deterministic placeholder so listing creation still succeeds.
   let imageUrl: string;
-  try {
-    imageUrl = await uploadToCloudinary();
-  } catch (err) {
-    console.warn(
-      "[createProduct] Cloudinary upload failed, using placeholder image:",
-      (err as { message?: string })?.message ?? err,
-    );
-    imageUrl = `https://placehold.co/600x600/eeeeee/001a41?text=${encodeURIComponent(
-      name.slice(0, 20),
-    )}`;
+  if (image.fileBuffer) {
+    // Cloudinary is optional: if credentials are missing/invalid (e.g. local dev),
+    // fall back to a deterministic placeholder so listing creation still succeeds.
+    try {
+      imageUrl = await uploadToCloudinary(image.fileBuffer);
+    } catch (err) {
+      console.warn(
+        "[createProduct] Cloudinary upload failed, using placeholder image:",
+        (err as { message?: string })?.message ?? err,
+      );
+      imageUrl = placeholderImage(name);
+    }
+  } else if (
+    typeof image.imageUrl === "string" &&
+    /^https?:\/\//i.test(image.imageUrl.trim())
+  ) {
+    imageUrl = image.imageUrl.trim();
+  } else {
+    imageUrl = placeholderImage(name);
   }
 
   const normalize = name
@@ -98,7 +116,10 @@ export const getTopProductPurchases = async (
   lastnumPurchases?: number,
   lastId?: string,
 ) => {
-  const query: any = { status: "approved" };
+  const query: any = {
+    status: "approved",
+    _id: { $in: await getOwnedProductIds() },
+  };
   if (lastnumPurchases != undefined && lastId) {
     query.$or = [
       { numPurchases: { $lt: lastnumPurchases } },
@@ -127,7 +148,10 @@ export const getTopSale = async (
   lastSale: number,
   lastId: string,
 ) => {
-  const query: any = { status: "approved" };
+  const query: any = {
+    status: "approved",
+    _id: { $in: await getOwnedProductIds() },
+  };
   if (lastSale != undefined && lastId) {
     query.$or = [
       { sale: { $lt: lastSale } },
@@ -156,7 +180,10 @@ export const getTopPoint = async (
   lastPoint: number,
   lastId: string,
 ) => {
-  const query: any = { status: "approved" };
+  const query: any = {
+    status: "approved",
+    _id: { $in: await getOwnedProductIds() },
+  };
   if (lastPoint != undefined && lastId) {
     query.$or = [
       { point: { $lt: lastPoint } },
@@ -185,10 +212,14 @@ export const getTopByType = async (
   lastId: string,
   type: string,
 ) => {
-  const query: Record<string, unknown> = { type, status: "approved" };
-  if (lastId) {
-    query._id = { $gt: lastId };
-  }
+  const ownedIds = await getOwnedProductIds();
+  const idFilter: Record<string, unknown> = { $in: ownedIds };
+  if (lastId) idFilter.$gt = lastId;
+  const query: Record<string, unknown> = {
+    type,
+    status: "approved",
+    _id: idFilter,
+  };
   const items = await Product.find(query)
     .sort({ _id: 1, sale: 1, numPurchases: -1, point: -1 })
     .limit(limit);
@@ -203,6 +234,7 @@ export const getTopByType = async (
 };
 
 export const getTopByListType = async (limit: number = 2, type: string[]) => {
+  const ownedIds = await getOwnedProductIds();
   const listItems: PProduct[] = [];
   let lastPriceId: string = "";
   let lastSaleId: string = "";
@@ -227,7 +259,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
         let items: PProduct[] = [];
 
         if (ord === "price") {
-          items = await Product.find({ status: "approved" })
+          items = await Product.find({ status: "approved", _id: { $in: ownedIds } })
             .sort({ [element]: -1, _id: 1, [ord]: 1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -236,7 +268,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
             lastPrice = lastItem.price;
           }
         } else if (ord === "sale") {
-          items = await Product.find({ status: "approved" })
+          items = await Product.find({ status: "approved", _id: { $in: ownedIds } })
             .sort({ [element]: -1, _id: 1, [ord]: -1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -245,7 +277,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
             lastSale = lastItem.sale ?? 0;
           }
         } else if (ord === "numPurchases") {
-          items = await Product.find({ status: "approved" })
+          items = await Product.find({ status: "approved", _id: { $in: ownedIds } })
             .sort({ [element]: -1, _id: 1, [ord]: -1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -254,7 +286,7 @@ export const getTopByListType = async (limit: number = 2, type: string[]) => {
             lastnumPurchases = lastItem.numPurchases ?? 0;
           }
         } else if (ord === "point") {
-          items = await Product.find({ status: "approved" })
+          items = await Product.find({ status: "approved", _id: { $in: ownedIds } })
             .sort({ [element]: -1, _id: 1, [ord]: -1 })
             .limit(limit);
           const lastItem = items[items.length - 1];
@@ -310,6 +342,7 @@ export const findProduct = async (
       $match: {
         normalize: { $regex: normalizedFind, $options: "i" },
         status: "approved",
+        _id: { $in: await getOwnedProductIds() },
       },
     },
     {

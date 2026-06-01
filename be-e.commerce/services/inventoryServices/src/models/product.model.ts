@@ -15,7 +15,27 @@ export interface PProduct extends Document {
   track?: number;
   status: "pending" | "approved" | "rejected";
   rejectionReason?: string;
+  rating?: number;
+  numReviews?: number;
+  reviews?: {
+    author: string;
+    rating: number;
+    text: string;
+    date: Date;
+  }[];
 }
+
+// Embedded review sub-document. _id disabled — reviews are seeded/aggregated,
+// not addressed individually.
+const ReviewSchema = new Schema(
+  {
+    author: { type: String, required: true },
+    rating: { type: Number, required: true, min: 0, max: 5 },
+    text: { type: String, default: "" },
+    date: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
 
 export const ProductSchema = new Schema(
   {
@@ -43,6 +63,10 @@ export const ProductSchema = new Schema(
       index: true,
     },
     rejectionReason: { type: String },
+
+    rating: { type: Number, default: 0, min: 0, max: 5 },
+    numReviews: { type: Number, default: 0 },
+    reviews: { type: [ReviewSchema], default: [] },
   },
   { timestamps: true },
 );

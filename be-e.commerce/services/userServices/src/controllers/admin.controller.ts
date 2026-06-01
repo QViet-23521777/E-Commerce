@@ -80,20 +80,35 @@ export const banUserController = async (c: Context) => {
 export const adminLoginController = async (c: Context) => {
   try {
     const { email, password } = await c.req.json();
-    const { user, otp } = await adminLogin(email, password);
-    mailClient
-      .sendLoginEmail(
-        user.email,
-        user.name,
-        otp,
-        new Date(Date.now() + 300000).toISOString(),
-      )
-      .catch(() => {});
+    const { user, otp, twoFactorEnabled, tokens, role } = await adminLogin(
+      email,
+      password,
+    );
+    if (twoFactorEnabled && otp) {
+      mailClient
+        .sendLoginEmail(
+          user.email,
+          user.name,
+          otp,
+          new Date(Date.now() + 300000).toISOString(),
+        )
+        .catch(() => {});
+    }
     return c.json(
       {
         success: true,
-        message: "OTP sent to admin email",
-        data: { id: user._id, name: user.name, email: user.email },
+        message: twoFactorEnabled
+          ? "OTP sent to admin email"
+          : "Admin logged in successfully",
+        data: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role,
+          twoFactorEnabled,
+        },
+        // Present only when 2FA is disabled — lets the client skip the OTP step.
+        tokens: tokens ?? undefined,
       },
       200,
     );

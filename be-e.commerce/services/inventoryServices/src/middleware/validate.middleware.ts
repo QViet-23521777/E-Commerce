@@ -2,8 +2,7 @@ import { Context, Next } from "hono";
 
 export const validateCreateProduct = async (c: Context, next: Next) => {
   const body = await c.req.parseBody();
-  const { name, description, price, type } = body;
-  const file = body["image"] as File;
+  const { name, description, price, type, imageUrl } = body;
 
   const errors: string[] = [];
 
@@ -12,7 +11,15 @@ export const validateCreateProduct = async (c: Context, next: Next) => {
   if (!type) errors.push("type là bắt buộc");
   if (!price || isNaN(Number(price))) errors.push("price phải là số hợp lệ");
   if (Number(price) <= 0) errors.push("price phải lớn hơn 0");
-  if (!file) errors.push("image là bắt buộc");
+  // Image is optional (uploaded file OR pasted URL). If a URL is supplied it
+  // must be http(s); when neither is given the service uses a placeholder.
+  if (
+    typeof imageUrl === "string" &&
+    imageUrl.trim() &&
+    !/^https?:\/\//i.test(imageUrl.trim())
+  ) {
+    errors.push("imageUrl phải bắt đầu bằng http:// hoặc https://");
+  }
 
   if (errors.length > 0) {
     return c.json({ success: false, errors }, 400);
