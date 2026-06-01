@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import {
+  advanceFulfillmentController,
+  cancelOrderController,
   createMomoPaymentController,
   getPaymentStatusController,
+  listMyOrdersController,
+  listSellerOrdersController,
   momoIpnController,
   walletCheckoutController,
 } from "../controllers/payment.controller";
@@ -26,6 +30,30 @@ paymentRoutes.post(
   extractUser,
   validateCreateMomoPayment, // dùng lại validator vì cùng input shape
   walletCheckoutController,
+);
+
+// Specific paths must be registered BEFORE the "/:orderId" catch-all.
+paymentRoutes.get("/", internalAuth, extractUser, listMyOrdersController);
+
+paymentRoutes.get(
+  "/seller",
+  internalAuth,
+  extractUser,
+  listSellerOrdersController,
+);
+
+paymentRoutes.patch(
+  "/:orderId/fulfillment",
+  internalAuth,
+  extractUser,
+  advanceFulfillmentController,
+);
+
+paymentRoutes.post(
+  "/:orderId/cancel",
+  internalAuth,
+  extractUser,
+  cancelOrderController,
 );
 
 paymentRoutes.get(

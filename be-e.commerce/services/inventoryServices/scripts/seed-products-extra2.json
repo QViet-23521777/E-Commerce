@@ -1,0 +1,21 @@
+[
+  { "name": "Wireless Charging Pad 15W", "normalize": "wireless charging pad 15w", "description": "Fast 15W Qi wireless charging pad with anti-slip surface.", "price": 359000, "sale": 42, "imageUrl": "https://images.unsplash.com/photo-1591290619618-904f6dd935e3?w=800&q=80", "type": "electronics", "point": 8, "numPurchases": 1560 },
+  { "name": "Action Camera 4K Waterproof", "normalize": "action camera 4k waterproof", "description": "4K30 action camera with waterproof case and mounts.", "price": 2890000, "sale": 36, "imageUrl": "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&q=80", "type": "electronics", "point": 45, "numPurchases": 690 },
+
+  { "name": "Merino Wool Sweater", "normalize": "merino wool sweater", "description": "Lightweight breathable merino wool crewneck sweater.", "price": 1190000, "sale": 30, "imageUrl": "https://images.unsplash.com/photo-1614495039153-5b30a4d2a8a0?w=800&q=80", "type": "fashion", "point": 24, "numPurchases": 430 },
+  { "name": "Minimalist Quartz Watch", "normalize": "minimalist quartz watch", "description": "Slim quartz watch with sapphire glass and mesh strap.", "price": 1490000, "sale": 28, "imageUrl": "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=800&q=80", "type": "fashion", "point": 30, "numPurchases": 580 },
+
+  { "name": "Single-Origin Coffee Capsules x50", "normalize": "single-origin coffee capsules x50", "description": "Compostable single-origin espresso capsules, box of 50.", "price": 259000, "sale": 25, "imageUrl": "https://images.unsplash.com/photo-1518057111178-44a106bad636?w=800&q=80", "type": "food-grocery", "point": 7, "numPurchases": 1420 },
+
+  { "name": "Air Fryer 5.5L Digital", "normalize": "air fryer 5.5l digital", "description": "5.5L digital air fryer with 8 presets and rapid air tech.", "price": 1690000, "sale": 34, "imageUrl": "https://images.unsplash.com/photo-1626074353765-517a681e40be?w=800&q=80", "type": "home-living", "point": 28, "numPurchases": 1120 },
+  { "name": "Weighted Blanket 7kg", "normalize": "weighted blanket 7kg", "description": "Breathable cotton weighted blanket, 7kg, for better sleep.", "price": 990000, "sale": 26, "imageUrl": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=800&q=80", "type": "home-living", "point": 18, "numPurchases": 640 },
+
+  { "name": "Hydrating Sheet Mask Set x10", "normalize": "hydrating sheet mask set x10", "description": "Hyaluronic hydrating sheet masks, pack of 10.", "price": 199000, "sale": 40, "imageUrl": "https://images.unsplash.com/photo-1556228852-80b6e5eeff06?w=800&q=80", "type": "health-beauty", "point": 5, "numPurchases": 2240 },
+
+  { "name": "Treadmill Folding Electric", "normalize": "treadmill folding electric", "description": "Compact folding electric treadmill, up to 12 km/h.", "price": 6990000, "sale": 30, "imageUrl": "https://images.unsplash.com/photo-1638536532686-d610adfc8e5c?w=800&q=80", "type": "sports", "point": 90, "numPurchases": 280 },
+  { "name": "Trail Running Shoes Grip", "normalize": "trail running shoes grip", "description": "Aggressive-grip trail running shoes, water-resistant.", "price": 1690000, "sale": 22, "imageUrl": "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=800&q=80", "type": "sports", "point": 28, "numPurchases": 510 },
+
+  { "name": "Wooden Train Set 60pc", "normalize": "wooden train set 60pc", "description": "60-piece wooden train and track set for ages 3+.", "price": 559000, "sale": 24, "imageUrl": "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=800&q=80", "type": "toys-baby", "point": 12, "numPurchases": 620 },
+
+  { "name": "Tire Inflator Cordless", "normalize": "tire inflator cordless", "description": "Cordless digital tire inflator with auto shut-off.", "price": 890000, "sale": 28, "imageUrl": "https://images.unsplash.com/photo-1632823471565-1ecdf5c6da77?w=800&q=80", "type": "automotive", "point": 16, "numPurchases": 740 }
+]

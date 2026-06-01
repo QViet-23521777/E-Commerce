@@ -12,6 +12,7 @@ import {
   handleSearchInventoriesByName,
   handleRestoreInventory,
   handleRestoreInventoryByList,
+  handleGetShopByProductId,
 } from "../controllers/inventory.controller";
 import { validateCreateInventory } from "../middleware/validate.middleware";
 
@@ -21,6 +22,7 @@ router.use("*", sanitizeRequestBody);
 router.post("/", validateCreateInventory, handleCreateInventory);
 router.get("/seller/:sellerId", handleGetInventoryBySellerId);
 router.get("/search", handleSearchInventoriesByName);
+router.get("/product/:productId", handleGetShopByProductId);
 router.get("/:inventoryId", handleGetInventoryById);
 router.put("/:inventoryId/quantity", handleUpdateInventoryQuantity);
 router.post("/:inventoryId/buy", handleBuyProduct);

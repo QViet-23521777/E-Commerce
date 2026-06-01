@@ -6,6 +6,24 @@ export interface IPaymentItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  sellerId?: string;
+  image?: string;
+  catalogProductId?: string;
+}
+
+export type FulfillmentStatus =
+  | "to_confirm"
+  | "processing"
+  | "shipped"
+  | "delivered"
+  | "cancelled";
+
+export interface IShippingAddress {
+  fullName?: string;
+  phone?: string;
+  line1?: string;
+  city?: string;
+  zip?: string;
 }
 
 export interface IPayment extends Document {
@@ -18,6 +36,12 @@ export interface IPayment extends Document {
   requestType: string;
   orderInfo: string;
   status: "pending" | "paid" | "failed";
+  fulfillmentStatus: FulfillmentStatus;
+  shippingAddress?: IShippingAddress;
+  shippingMethod?: string;
+  trackingNo?: string | null;
+  cancelledAt?: Date | null;
+  refundedAt?: Date | null;
   redirectUrl: string;
   ipnUrl: string;
   extraData: string;
@@ -44,6 +68,20 @@ const PaymentItemSchema = new Schema<IPaymentItem>(
     quantity: { type: Number, required: true },
     unitPrice: { type: Number, required: true },
     totalPrice: { type: Number, required: true },
+    sellerId: { type: String, default: null },
+    image: { type: String, default: null },
+    catalogProductId: { type: String, default: null },
+  },
+  { _id: false },
+);
+
+const ShippingAddressSchema = new Schema<IShippingAddress>(
+  {
+    fullName: { type: String, default: "" },
+    phone: { type: String, default: "" },
+    line1: { type: String, default: "" },
+    city: { type: String, default: "" },
+    zip: { type: String, default: "" },
   },
   { _id: false },
 );
@@ -64,6 +102,17 @@ const PaymentSchema = new Schema<IPayment>(
       default: "pending",
       index: true,
     },
+    fulfillmentStatus: {
+      type: String,
+      enum: ["to_confirm", "processing", "shipped", "delivered", "cancelled"],
+      default: "to_confirm",
+      index: true,
+    },
+    shippingAddress: { type: ShippingAddressSchema, default: null },
+    shippingMethod: { type: String, default: null },
+    trackingNo: { type: String, default: null },
+    cancelledAt: { type: Date, default: null },
+    refundedAt: { type: Date, default: null },
     redirectUrl: { type: String, required: true },
     ipnUrl: { type: String, required: true },
     extraData: { type: String, default: "" },
@@ -86,6 +135,7 @@ const PaymentSchema = new Schema<IPayment>(
 );
 
 PaymentSchema.index({ userId: 1, createdAt: -1 });
+PaymentSchema.index({ "items.sellerId": 1, createdAt: -1 });
 
 export const PaymentModel =
   mongoose.models.Payment ||

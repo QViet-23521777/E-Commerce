@@ -1,0 +1,302 @@
+[
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a32f",
+    "name": "Nordic Market",
+    "address": "10 Le Loi, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop01%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a333",
+    "name": "Golden Bazaar",
+    "address": "17 Nguyen Hue, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop02%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a337",
+    "name": "Urban Supply",
+    "address": "24 Tran Hung Dao, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop03%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a33b",
+    "name": "Coastal Depot",
+    "address": "31 Hai Ba Trung, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop04%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a33f",
+    "name": "Velvet Warehouse",
+    "address": "38 Dong Khoi, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop05%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a343",
+    "name": "Copper Emporium",
+    "address": "45 Pasteur, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop06%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a347",
+    "name": "Maple Goods",
+    "address": "52 Vo Van Tan, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop07%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a34b",
+    "name": "Crimson Collective",
+    "address": "59 Cach Mang Thang 8, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop08%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a34f",
+    "name": "Azure Outfitters",
+    "address": "66 Ly Tu Trong, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop09%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a353",
+    "name": "Ivory Stores",
+    "address": "73 Nam Ky Khoi Nghia, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop10%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a357",
+    "name": "Stone Trading Co.",
+    "address": "80 Le Loi, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop11%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a35b",
+    "name": "Amber Mercantile",
+    "address": "87 Nguyen Hue, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop12%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a35f",
+    "name": "Cedar Boutique",
+    "address": "94 Tran Hung Dao, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop13%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a363",
+    "name": "Frost Workshop",
+    "address": "101 Hai Ba Trung, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop14%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a367",
+    "name": "Harbor Market",
+    "address": "108 Dong Khoi, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop15%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a36b",
+    "name": "Lunar Bazaar",
+    "address": "115 Pasteur, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop16%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a36f",
+    "name": "Sage Supply",
+    "address": "122 Vo Van Tan, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop17%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a373",
+    "name": "Onyx Depot",
+    "address": "129 Cach Mang Thang 8, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop18%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a377",
+    "name": "Willow Warehouse",
+    "address": "136 Ly Tu Trong, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop19%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a37b",
+    "name": "Cobalt Emporium",
+    "address": "143 Nam Ky Khoi Nghia, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop20%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a37f",
+    "name": "Ember Goods",
+    "address": "150 Le Loi, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop21%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a383",
+    "name": "Birch Collective",
+    "address": "157 Nguyen Hue, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop22%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a387",
+    "name": "Slate Outfitters",
+    "address": "164 Tran Hung Dao, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop23%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a38b",
+    "name": "Pearl Stores",
+    "address": "171 Hai Ba Trung, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop24%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a38f",
+    "name": "Aspen Trading Co.",
+    "address": "178 Dong Khoi, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop25%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a393",
+    "name": "Nordic Mercantile",
+    "address": "185 Pasteur, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop26%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a397",
+    "name": "Golden Boutique",
+    "address": "192 Vo Van Tan, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop27%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a39b",
+    "name": "Urban Workshop",
+    "address": "199 Cach Mang Thang 8, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop28%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a39f",
+    "name": "Coastal Market",
+    "address": "206 Ly Tu Trong, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop29%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3a3",
+    "name": "Velvet Bazaar",
+    "address": "213 Nam Ky Khoi Nghia, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop30%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3a7",
+    "name": "Copper Supply",
+    "address": "220 Le Loi, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop31%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3ab",
+    "name": "Maple Depot",
+    "address": "227 Nguyen Hue, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop32%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3af",
+    "name": "Crimson Warehouse",
+    "address": "234 Tran Hung Dao, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop33%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3b3",
+    "name": "Azure Emporium",
+    "address": "241 Hai Ba Trung, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop34%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3b7",
+    "name": "Ivory Goods",
+    "address": "248 Dong Khoi, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop35%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3bb",
+    "name": "Stone Collective",
+    "address": "15 Pasteur, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop36%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3bf",
+    "name": "Amber Outfitters",
+    "address": "22 Vo Van Tan, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop37%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3c3",
+    "name": "Cedar Stores",
+    "address": "29 Cach Mang Thang 8, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop38%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3c7",
+    "name": "Frost Trading Co.",
+    "address": "36 Ly Tu Trong, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop39%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3cb",
+    "name": "Harbor Mercantile",
+    "address": "43 Nam Ky Khoi Nghia, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop40%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3cf",
+    "name": "Lunar Boutique",
+    "address": "50 Le Loi, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop41%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3d3",
+    "name": "Sage Workshop",
+    "address": "57 Nguyen Hue, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop42%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3d7",
+    "name": "Onyx Market",
+    "address": "64 Tran Hung Dao, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop43%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3db",
+    "name": "Willow Bazaar",
+    "address": "71 Hai Ba Trung, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop44%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3df",
+    "name": "Cobalt Supply",
+    "address": "78 Dong Khoi, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop45%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3e3",
+    "name": "Ember Depot",
+    "address": "85 Pasteur, District 1, Ho Chi Minh City",
+    "avatar": "https://i.pravatar.cc/150?u=shop46%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3e7",
+    "name": "Birch Warehouse",
+    "address": "92 Vo Van Tan, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop47%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3eb",
+    "name": "Slate Emporium",
+    "address": "99 Cach Mang Thang 8, Hai Chau, Da Nang",
+    "avatar": "https://i.pravatar.cc/150?u=shop48%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3ef",
+    "name": "Pearl Goods",
+    "address": "106 Ly Tu Trong, Ninh Kieu, Can Tho",
+    "avatar": "https://i.pravatar.cc/150?u=shop49%40seed.shop"
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a3f3",
+    "name": "Aspen Collective",
+    "address": "113 Nam Ky Khoi Nghia, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop50%40seed.shop"
+  }
+]

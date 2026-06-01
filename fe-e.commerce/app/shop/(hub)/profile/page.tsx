@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import {
   Store,
@@ -15,30 +15,50 @@ import {
   Check,
   Star,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
+import { getUser } from "@/lib/auth";
+import { fetchMyProfile, updateMyProfile } from "@/lib/user";
+import { fetchSellerProfile, updateSellerProfile } from "@/lib/seller";
+import TwoFactorToggle from "@/components/TwoFactorToggle";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-type TabId = "info" | "shipping" | "policies";
+type TabId = "info" | "shipping" | "policies" | "security";
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "info", label: "Store Info", icon: Store },
   { id: "shipping", label: "Contact & Shipping", icon: MapPin },
   { id: "policies", label: "Policies", icon: FileText },
+  { id: "security", label: "Security", icon: ShieldCheck },
 ];
 
-function SaveButton({ onClick, saved }: { onClick: () => void; saved: boolean }) {
+function SaveButton({
+  onClick,
+  saved,
+  saving,
+}: {
+  onClick: () => void;
+  saved: boolean;
+  saving?: boolean;
+}) {
   return (
     <motion.button
       onClick={onClick}
+      disabled={saving}
       animate={saved ? { backgroundColor: "#001a41" } : { backgroundColor: "#00f3ff" }}
       transition={{ duration: 0.25, ease: EASE }}
-      className="flex items-center gap-2 h-10 px-5 rounded-xl border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all duration-150 text-sm font-bold"
+      className="flex items-center gap-2 h-10 px-5 rounded-xl border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all duration-150 text-sm font-bold disabled:opacity-70"
     >
       {saved ? (
         <>
           <Check className="w-4 h-4 text-primary-container" />
           <span className="text-primary-container">Saved</span>
+        </>
+      ) : saving ? (
+        <>
+          <Loader2 className="w-4 h-4 text-deep-navy animate-spin" />
+          <span className="text-deep-navy">Saving…</span>
         </>
       ) : (
         <>
@@ -83,36 +103,85 @@ function Input({
 export default function ShopProfilePage() {
   const [activeTab, setActiveTab] = useState<TabId>("info");
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [userId, setUserId] = useState("");
 
-  // Store info state
-  const [storeName, setStoreName] = useState("Nordic Living Co.");
+  // Store info state — storeName is the seller's account name (persisted).
+  const [storeName, setStoreName] = useState("");
   const [tagline, setTagline] = useState("Scandinavian design for modern living");
   const [description, setDescription] = useState(
     "We curate premium Scandinavian homeware and lifestyle products, bringing the essence of Nordic design to your home. Every piece in our collection is selected for its craftsmanship, sustainability, and timeless aesthetic."
   );
   const [category, setCategory] = useState("Home & Living");
-  const [website, setWebsite] = useState("https://nordicliving.co");
+  const [website, setWebsite] = useState("");
 
-  // Contact & shipping state
-  const [email, setEmail] = useState("hello@nordicliving.co");
-  const [phone, setPhone] = useState("+47 21 23 45 67");
-  const [address, setAddress] = useState("14 Fjord Street, Apt 3B");
-  const [city, setCity] = useState("Oslo");
+  // Contact & shipping state — phone + address are persisted to the seller profile.
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
   const [country, setCountry] = useState("Norway");
   const [processingTime, setProcessingTime] = useState("1-2");
   const [freeShipping, setFreeShipping] = useState("150");
 
-  // Policies state
+  // Policies state — display-only (no backend storage).
   const [returnPolicy, setReturnPolicy] = useState(
-    "We accept returns within 30 days of delivery. Items must be unused, in their original packaging. Contact us at hello@nordicliving.co to initiate a return. Refunds are processed within 5-7 business days."
+    "We accept returns within 30 days of delivery. Items must be unused, in their original packaging. Contact us to initiate a return. Refunds are processed within 5-7 business days."
   );
   const [privacyNote, setPrivacyNote] = useState(
-    "We collect only the information necessary to process your order and improve our services. Your personal data is never sold to third parties. For questions, contact us at privacy@nordicliving.co."
+    "We collect only the information necessary to process your order and improve our services. Your personal data is never sold to third parties."
   );
 
-  function handleSave() {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  useEffect(() => {
+    const u = getUser();
+    if (!u?.userId) { setLoading(false); return; }
+    setUserId(u.userId);
+    let alive = true;
+    (async () => {
+      const [p, s] = await Promise.allSettled([
+        fetchMyProfile(),
+        fetchSellerProfile(u.userId),
+      ]);
+      if (!alive) return;
+      if (p.status === "fulfilled") {
+        setStoreName(p.value.name ?? "");
+        setEmail(p.value.email ?? "");
+      }
+      if (s.status === "fulfilled") {
+        setPhone(s.value.phone ?? "");
+        setAddress(s.value.address ?? "");
+      }
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  async function handleSave() {
+    if (!userId) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await Promise.all([
+        updateMyProfile({ name: storeName.trim() }),
+        updateSellerProfile(userId, { phone: phone.trim(), address: address.trim() }),
+      ]);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: unknown) {
+      setSaveError((err as { message?: string })?.message ?? "Couldn't save changes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] text-on-surface-variant">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -131,7 +200,10 @@ export default function ShopProfilePage() {
             Manage your store identity and settings
           </p>
         </div>
-        <SaveButton onClick={handleSave} saved={saved} />
+        <div className="flex flex-col items-end gap-1">
+          <SaveButton onClick={handleSave} saved={saved} saving={saving} />
+          {saveError && <p className="text-xs font-medium text-error">{saveError}</p>}
+        </div>
       </div>
 
       {/* Store banner strip */}
@@ -153,15 +225,15 @@ export default function ShopProfilePage() {
         <div className="px-6 pb-5">
           <div className="flex items-end gap-4 -mt-7 mb-4">
             <div className="relative shrink-0">
-              <div className="w-16 h-16 bg-primary-container border-4 border-white rounded-xl flex items-center justify-center text-xl font-bold text-deep-navy shadow-sm">
-                NL
+              <div className="w-16 h-16 bg-primary-container border-4 border-white rounded-xl flex items-center justify-center text-xl font-bold text-deep-navy shadow-sm uppercase">
+                {storeName ? storeName.trim().slice(0, 2) : "··"}
               </div>
               <button className="absolute -bottom-1 -right-1 w-5 h-5 bg-deep-navy rounded-full flex items-center justify-center border-2 border-white">
                 <Camera className="w-2.5 h-2.5 text-primary-container" />
               </button>
             </div>
             <div className="pb-1">
-              <p className="font-bold text-deep-navy">{storeName}</p>
+              <p className="font-bold text-deep-navy capitalize">{storeName || "Your shop"}</p>
               <div className="flex items-center gap-2 mt-0.5">
                 <div className="flex items-center gap-1">
                   <Star className="w-3 h-3 text-primary fill-primary" />
@@ -290,14 +362,14 @@ export default function ShopProfilePage() {
           <div className="space-y-6">
             <div className="grid sm:grid-cols-2 gap-5">
               <div>
-                <FieldLabel>Business Email</FieldLabel>
+                <FieldLabel>Business Email (read-only)</FieldLabel>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-outline" />
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full h-11 pl-10 pr-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none transition-colors duration-150"
+                    disabled
+                    className="block w-full h-11 pl-10 pr-4 border-2 border-deep-navy/10 rounded-xl bg-surface-container-low text-sm text-on-surface-variant outline-none cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -426,11 +498,19 @@ export default function ShopProfilePage() {
             </div>
           </div>
         )}
+
+        {activeTab === "security" && (
+          <div className="max-w-xl">
+            <TwoFactorToggle />
+          </div>
+        )}
       </motion.div>
 
-      <div className="mt-4 flex justify-end">
-        <SaveButton onClick={handleSave} saved={saved} />
-      </div>
+      {activeTab !== "security" && (
+        <div className="mt-4 flex justify-end">
+          <SaveButton onClick={handleSave} saved={saved} />
+        </div>
+      )}
     </div>
   );
 }

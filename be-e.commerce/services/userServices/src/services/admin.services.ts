@@ -1,6 +1,7 @@
 import { User } from "../models/userModel";
 import { Role } from "../models/role.Model";
 import crypto from "crypto";
+import { randomInt, createHash } from "crypto";
 import { AdminInvite } from "../models/admin.invite.model";
 import bcrypt from "bcrypt";
 import { JwtService } from "../utils/jwtService";
@@ -8,7 +9,7 @@ export const createAdmin = async (
   name: string,
   email: string,
   ip: string,
-  superAdminId: string,
+  superAdminId?: string,
 ) => {
   const existingUser = await User.findOne({ email });
   if (existingUser) {
@@ -77,20 +78,68 @@ export const verifyAdmin = async (
 export const adminLogin = async (email: string, password: string) => {
   const user = await User.findOne({ email });
   if (!user) {
-    throw new Error("Invalid email or password");
+    throw new Error("INVALID_CREDENTIALS");
   }
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
-    throw new Error("Invalid email or password");
+    throw new Error("INVALID_CREDENTIALS");
   }
+  const role = await Role.findById(user.roleId);
+  if (role?.name !== "admin" && role?.name !== "superadmin") {
+    throw new Error("NOT_AN_ADMIN");
+  }
+
+  // Per-account 2FA toggle. When disabled, mint the token pair here (the OTP
+  // step is where admin tokens are normally generated) so the client can sign
+  // in directly. Legacy admins without the field read as `true` (mandatory 2FA).
+  const twoFactorEnabled = user.twoFactorEnabled !== false;
+  if (!twoFactorEnabled) {
+    user.otp = undefined;
+    const tokens = await JwtService.generateTokenPair({
+      userId: user._id.toString(),
+      email: user.email,
+      role: role.name,
+    });
+    user.refreshToken = tokens.refreshToken;
+    await user.save();
+    return { user, otp: null, twoFactorEnabled, tokens, role: role.name };
+  }
+
+  const otp = randomInt(100000, 1000000).toString();
+  user.otp = createHash("sha256").update(otp).digest("hex");
+  await user.save();
+  return {
+    user,
+    otp,
+    twoFactorEnabled,
+    tokens: null as null | Awaited<
+      ReturnType<typeof JwtService.generateTokenPair>
+    >,
+    role: role.name,
+  };
+};
+
+export const adminSecondFactorAuth = async (userId: string, otp: string) => {
+  const user = await User.findById(userId);
+  if (!user) throw new Error("USER_NOT_FOUND");
+  if (!otp) throw new Error("OTP_REQUIRED");
+  const hashedInput = createHash("sha256").update(otp).digest("hex");
+  if (hashedInput !== user.otp) throw new Error("INVALID_OTP");
+
+  const role = await Role.findById(user.roleId);
+  if (role?.name !== "admin" && role?.name !== "superadmin") {
+    throw new Error("NOT_AN_ADMIN");
+  }
+
   const tokens = await JwtService.generateTokenPair({
     userId: user._id.toString(),
     email: user.email,
-    role: "admin",
+    role: role.name,
   });
   user.refreshToken = tokens.refreshToken;
+  user.otp = undefined;
   await user.save();
-  return { user, tokens };
+  return { user, tokens, role: role.name };
 };
 
 export const banUser = async (adminId: string, userId: string) => {

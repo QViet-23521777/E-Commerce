@@ -70,6 +70,7 @@ const main = async () => {
     .filter((p) => p && typeof p === "object")
     .map((p: any) => ({
       ...p,
+      status: p.status ?? "approved",
       createdAt: toDate(p.createdAt) ?? new Date(),
       updatedAt: toDate(p.updatedAt) ?? new Date(),
     }));

@@ -11,6 +11,7 @@ import {
   findInventoriesByName,
   restoreInventory,
   restoreInventoryByList,
+  getShopByProductId,
 } from "../services/inventory.services";
 
 export const handleCreateInventory = async (c: Context) => {
@@ -125,6 +126,20 @@ export const handleDeleteInventory = async (c: Context) => {
     return c.json({ success: true, message: "Inventory deleted successfully" });
   } catch (error: any) {
     if (error.message === "Inventory not found") {
+      return c.json({ success: false, message: error.message }, 404);
+    }
+    console.error(error);
+    return c.json({ success: false, message: "Internal server error" }, 500);
+  }
+};
+
+export const handleGetShopByProductId = async (c: Context) => {
+  try {
+    const productId = c.req.param("productId")?.toString() || "";
+    const shop = await getShopByProductId(productId);
+    return c.json({ success: true, data: shop });
+  } catch (error: any) {
+    if (error.message === "SHOP_NOT_FOUND") {
       return c.json({ success: false, message: error.message }, 404);
     }
     console.error(error);

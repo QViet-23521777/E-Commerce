@@ -1,0 +1,29 @@
+[
+  { "name": "Curved Gaming Monitor 27\"", "normalize": "curved gaming monitor 27\"", "description": "27-inch 165Hz curved QHD monitor with 1ms response.", "price": 6490000, "sale": 32, "imageUrl": "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=800&q=80", "type": "electronics", "point": 80, "numPurchases": 740 },
+  { "name": "USB-C Hub 8-in-1", "normalize": "usb-c hub 8-in-1", "description": "8-in-1 USB-C hub with HDMI, ethernet and SD card reader.", "price": 890000, "sale": 45, "imageUrl": "https://images.unsplash.com/photo-1625842268584-8f3296236761?w=800&q=80", "type": "electronics", "point": 16, "numPurchases": 2150 },
+  { "name": "Smart LED Bulb 4-Pack", "normalize": "smart led bulb 4-pack", "description": "Wi-Fi smart RGB bulbs, app and voice control, pack of 4.", "price": 690000, "sale": 38, "imageUrl": "https://images.unsplash.com/photo-1550985616-10810253b84d?w=800&q=80", "type": "electronics", "point": 12, "numPurchases": 1380 },
+
+  { "name": "Cashmere Scarf", "normalize": "cashmere scarf", "description": "Soft 100% cashmere scarf in heather grey.", "price": 790000, "sale": 30, "imageUrl": "https://images.unsplash.com/photo-1457545195570-67f207084966?w=800&q=80", "type": "fashion", "point": 16, "numPurchases": 610 },
+  { "name": "Chelsea Leather Boots", "normalize": "chelsea leather boots", "description": "Classic slip-on Chelsea boots in full-grain leather.", "price": 1990000, "sale": 25, "imageUrl": "https://images.unsplash.com/photo-1638247025967-b4e38f787b76?w=800&q=80", "type": "fashion", "point": 35, "numPurchases": 480 },
+
+  { "name": "Matcha Green Tea Powder 100g", "normalize": "matcha green tea powder 100g", "description": "Ceremonial-grade stone-ground matcha, 100g tin.", "price": 329000, "sale": 20, "imageUrl": "https://images.unsplash.com/photo-1536013455962-cae9c8e58a3f?w=800&q=80", "type": "food-grocery", "point": 8, "numPurchases": 1290 },
+  { "name": "Extra Virgin Coconut Oil 500ml", "normalize": "extra virgin coconut oil 500ml", "description": "Cold-pressed organic virgin coconut oil, 500ml jar.", "price": 199000, "sale": 15, "imageUrl": "https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=800&q=80", "type": "food-grocery", "point": 5, "numPurchases": 1640 },
+
+  { "name": "Stainless Steel Cookware Set", "normalize": "stainless steel cookware set", "description": "10-piece tri-ply stainless steel cookware set.", "price": 3490000, "sale": 35, "imageUrl": "https://images.unsplash.com/photo-1584990347449-a2d4c2c9b9f7?w=800&q=80", "type": "home-living", "point": 60, "numPurchases": 390 },
+  { "name": "Memory Foam Pillow 2-Pack", "normalize": "memory foam pillow 2-pack", "description": "Cooling gel memory foam pillows, queen, pack of 2.", "price": 690000, "sale": 28, "imageUrl": "https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?w=800&q=80", "type": "home-living", "point": 14, "numPurchases": 870 },
+
+  { "name": "Retinol Night Cream 50ml", "normalize": "retinol night cream 50ml", "description": "Anti-ageing retinol night cream with peptides, 50ml.", "price": 459000, "sale": 33, "imageUrl": "https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=800&q=80", "type": "health-beauty", "point": 13, "numPurchases": 980 },
+  { "name": "Beard Trimmer Cordless", "normalize": "beard trimmer cordless", "description": "Cordless beard and hair trimmer with 20 length settings.", "price": 690000, "sale": 24, "imageUrl": "https://images.unsplash.com/photo-1621607512214-68297480165e?w=800&q=80", "type": "health-beauty", "point": 14, "numPurchases": 720 },
+
+  { "name": "Adjustable Kettlebell 18kg", "normalize": "adjustable kettlebell 18kg", "description": "Adjustable kettlebell, 4 to 18kg in one unit.", "price": 1290000, "sale": 22, "imageUrl": "https://images.unsplash.com/photo-1604480132736-44c188fe4d20?w=800&q=80", "type": "sports", "point": 24, "numPurchases": 540 },
+  { "name": "Insulated Sports Bottle 1L", "normalize": "insulated sports bottle 1l", "description": "Vacuum-insulated stainless steel bottle, keeps cold 24h.", "price": 259000, "sale": 18, "imageUrl": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&q=80", "type": "sports", "point": 6, "numPurchases": 1820 },
+
+  { "name": "The Art of War", "normalize": "the art of war", "description": "Sun Tzu's timeless treatise on strategy, annotated edition.", "price": 159000, "sale": 20, "imageUrl": "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=800&q=80", "type": "books", "point": 4, "numPurchases": 1430 },
+
+  { "name": "STEM Robotics Kit", "normalize": "stem robotics kit", "description": "Build-your-own programmable robot kit for ages 8+.", "price": 890000, "sale": 26, "imageUrl": "https://images.unsplash.com/photo-1561144257-e32e8efc6c4f?w=800&q=80", "type": "toys-baby", "point": 18, "numPurchases": 460 },
+
+  { "name": "Car Phone Charger Fast", "normalize": "car phone charger fast", "description": "Dual-port 45W fast car charger with USB-C PD.", "price": 199000, "sale": 30, "imageUrl": "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800&q=80", "type": "automotive", "point": 5, "numPurchases": 1190 },
+
+  { "name": "Orthopedic Dog Bed Large", "normalize": "orthopedic dog bed large", "description": "Memory-foam orthopedic dog bed with washable cover, large.", "price": 890000, "sale": 25, "imageUrl": "https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?w=800&q=80", "type": "pet-supplies", "point": 16, "numPurchases": 520 },
+  { "name": "Automatic Pet Water Fountain", "normalize": "automatic pet water fountain", "description": "2.5L ultra-quiet pet water fountain with filter.", "price": 559000, "sale": 20, "imageUrl": "https://images.unsplash.com/photo-1574231164645-d6f0e8553590?w=800&q=80", "type": "pet-supplies", "point": 12, "numPurchases": 640 }
+]

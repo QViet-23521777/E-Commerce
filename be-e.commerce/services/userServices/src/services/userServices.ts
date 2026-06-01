@@ -20,6 +20,7 @@ export interface LoginInput {
 export interface UpdateProfileInput {
   name?: string;
   walletId?: string;
+  twoFactorEnabled?: boolean;
 }
 
 export const registerUser = async ({
@@ -53,18 +54,41 @@ export const registerUser = async ({
   return { user: newUser, tokens, Token };
 };
 
+const resolveRoleName = async (
+  roleId: any,
+): Promise<"user" | "seller" | "admin" | "superadmin"> => {
+  const role = await Role.findById(roleId);
+  return (role?.name as any) ?? "user";
+};
+
 export const loginUser = async ({ email, password }: LoginInput) => {
   const user = await User.findOne({ email });
   if (!user) throw new Error("INVALID_CREDENTIALS");
-  if (!user.isVerified) throw new Error("EMAIL_NOT_VERIFIED");
 
   const isPasswordValid = await argon2.verify(user.password, password);
   if (!isPasswordValid) throw new Error("INVALID_CREDENTIALS");
-  const otp = randomInt(100000, 1000000).toString();
-  user.otp = createHash("sha256").update(otp).digest("hex");
+
+  const roleName = await resolveRoleName(user.roleId);
+  const tokens = JwtService.generateTokenPair({
+    userId: user._id.toString(),
+    email: user.email,
+    role: roleName,
+  });
+  user.refreshToken = tokens.refreshToken;
+
+  // Honor the per-account toggle. Legacy users without the field read as `true`
+  // via the schema default, so 2FA stays mandatory unless explicitly turned off.
+  const twoFactorEnabled = user.twoFactorEnabled !== false;
+  let otp: string | null = null;
+  if (twoFactorEnabled) {
+    otp = randomInt(100000, 1000000).toString();
+    user.otp = createHash("sha256").update(otp).digest("hex");
+  } else {
+    user.otp = undefined;
+  }
   await user.save();
 
-  return { user, otp };
+  return { user, tokens, otp, twoFactorEnabled };
 };
 
 export const SecondFactorAuth = async (userId: string, otp: string) => {
@@ -75,13 +99,15 @@ export const SecondFactorAuth = async (userId: string, otp: string) => {
   if (hashedInput !== user.otp) {
     throw new Error("INVALID_OTP");
   }
+  const roleName = await resolveRoleName(user.roleId);
   const tokens = JwtService.generateTokenPair({
     userId: user._id.toString(),
     email: user.email,
-    role: "user",
+    role: roleName,
   });
 
   user.refreshToken = tokens.refreshToken;
+  user.otp = undefined;
   await user.save();
 
   return { user, tokens };
@@ -163,12 +189,14 @@ export const getUserByToken = async (token: string) => {
 
 export const updateUserProfile = async (
   userId: string,
-  { name, walletId }: UpdateProfileInput,
+  { name, walletId, twoFactorEnabled }: UpdateProfileInput,
 ) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("USER_NOT_FOUND");
 
   if (name) user.name = name;
+  if (typeof twoFactorEnabled === "boolean")
+    user.twoFactorEnabled = twoFactorEnabled;
 
   // Sửa bug — cập nhật walletId đúng cách
   const userProfile = await UserProfile.findOne({ userId: user._id });
@@ -221,10 +249,27 @@ export const verifyResetPassword = async (token: string, otp: string) => {
   await user.save();
 };
 
+export const changePasswordByUserId = async (
+  userId: string,
+  oldPassword: string,
+  newPassword: string,
+) => {
+  const user = await User.findById(userId);
+  if (!user) throw new Error("USER_NOT_FOUND");
+  if (!(await argon2.verify(user.password, oldPassword))) {
+    throw new Error("OLD_PASSWORD_INCORRECT");
+  }
+  if (await argon2.verify(user.password, newPassword)) {
+    throw new Error("PASSWORD_SAME_AS_OLD");
+  }
+  user.password = await argon2.hash(newPassword);
+  await user.save();
+};
+
 export const resetPassword = async (
   token: string,
   newPassword: string,
-  oldPassword: string,
+  oldPassword?: string,
 ) => {
   const user = await User.findOne({ Token: token });
   if (!user) throw new Error("INVALID_TOKEN");
@@ -235,12 +280,13 @@ export const resetPassword = async (
   if (await argon2.verify(user.password, newPassword)) {
     throw new Error("PASSWORD_SAME_AS_OLD");
   }
-  if (!(await argon2.verify(user.password, oldPassword))) {
+  if (oldPassword && !(await argon2.verify(user.password, oldPassword))) {
     throw new Error("OLD_PASSWORD_INCORRECT");
   }
 
   user.password = await argon2.hash(newPassword);
   user.Token = undefined;
   user.TokenExpiredAt = undefined;
+  user.refreshToken = undefined;
   await user.save();
 };

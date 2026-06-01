@@ -42,7 +42,7 @@ export default function HeroBanner() {
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.55, ease: EASE }}
-          className="lg:col-span-7 relative rounded-2xl overflow-hidden border-2 border-deep-navy bg-deep-navy flex flex-col justify-end p-8 md:p-10 min-h-[260px]"
+          className="lg:col-span-7 relative rounded-2xl overflow-hidden border-2 border-deep-navy bg-deep-navy flex flex-col justify-center p-8 md:p-12 min-h-[380px]"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -51,8 +51,8 @@ export default function HeroBanner() {
             aria-hidden="true"
             className="absolute inset-0 w-full h-full object-cover opacity-15 mix-blend-luminosity"
           />
-          {/* Gradient overlay for text legibility */}
-          <div className="absolute inset-0 bg-gradient-to-t from-deep-navy/95 via-deep-navy/60 to-transparent" />
+          {/* Gradient overlay — full coverage so centered text always reads */}
+          <div className="absolute inset-0 bg-deep-navy/75" />
 
           <div className="relative z-10 space-y-4">
             <span className="text-label-caps text-primary-container tracking-widest">

@@ -5,6 +5,7 @@ import {
   getSellerProfile,
   updateSellerProfile,
   deleteSellerAccount,
+  getSellerPublicProfile,
 } from "../services/seller.services";
 import { mailClient } from "../utils/mailClient";
 const HTTP_STATUS: Record<string, number> = {
@@ -81,6 +82,16 @@ export const getSeller = async (c: Context) => {
       },
       200,
     );
+  } catch (error) {
+    return handleError(c, error);
+  }
+};
+
+export const getSellerPublic = async (c: Context) => {
+  try {
+    const userId = c.req.param("userId");
+    const data = await getSellerPublicProfile(userId);
+    return c.json({ success: true, data }, 200);
   } catch (error) {
     return handleError(c, error);
   }

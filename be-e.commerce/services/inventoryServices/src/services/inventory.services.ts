@@ -128,7 +128,7 @@ export const restoreInventory = async (
 export const findInventoryById = async (inventoryId: string) => {
   const inventory = await Inventory.findById(inventoryId).populate(
     "productId",
-    "price name",
+    "price name imageUrl",
   );
   if (!inventory) {
     throw new Error("Inventory not found");
@@ -168,4 +168,19 @@ export const deleteInventory = async (inventoryId: string) => {
   }
   await Inventory.findByIdAndDelete(inventoryId);
   return inventory;
+};
+
+export const getShopByProductId = async (productId: string) => {
+  const inv = await Inventory.findOne({ productId });
+  if (!inv) throw new Error("SHOP_NOT_FOUND");
+  const sellerId = String(inv.sellerId);
+  const sellerInventories = await Inventory.find({ sellerId }).populate(
+    "productId",
+  );
+  const productCount = sellerInventories.length;
+  const unitsSold = sellerInventories.reduce((sum, it) => {
+    const p = it.productId as unknown as { numPurchases?: number } | null;
+    return sum + (p?.numPurchases ?? 0);
+  }, 0);
+  return { sellerId, inventoryId: String(inv._id), productCount, unitsSold };
 };

@@ -10,6 +10,8 @@ import {
   findProduct,
   trackRecommendation,
   trackingWithoutData,
+  listProductsByStatus,
+  setProductStatus,
 } from "../services/product.services";
 
 // ─── TẠO SẢN PHẨM ───────────────────────────────────
@@ -17,22 +19,30 @@ export const handleCreateProduct = async (c: Context) => {
   try {
     const body = await c.req.parseBody();
     const { name, description, price, type, point, sale, numPurchases } = body;
-    const file = body["image"] as File;
+    // Image is optional: either an uploaded file or a pasted image URL.
+    const file = body["image"] as File | undefined;
+    const imageUrl = body["imageUrl"];
 
-    if (!name || !description || !price || !type || !file) {
+    if (!name || !description || !price || !type) {
       return c.json(
         { success: false, message: "Thiếu thông tin bắt buộc" },
         400,
       );
     }
 
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const fileBuffer =
+      file && typeof file !== "string"
+        ? Buffer.from(await file.arrayBuffer())
+        : undefined;
 
     const product = await createProduct(
       name as string,
       description as string,
       Number(price),
-      fileBuffer,
+      {
+        fileBuffer,
+        imageUrl: typeof imageUrl === "string" ? imageUrl : undefined,
+      },
       type as string,
       point ? Number(point) : 0,
       sale ? Number(sale) : undefined,
@@ -41,6 +51,7 @@ export const handleCreateProduct = async (c: Context) => {
 
     return c.json({ success: true, data: product }, 201);
   } catch (error) {
+    console.error("[handleCreateProduct] error:", error);
     return c.json({ success: false, message: "Internal server error" }, 500);
   }
 };
@@ -242,6 +253,35 @@ export const handleTrackingWithoutData = async (c: Context) => {
 
     return c.json({ success: true, data: result }, 200);
   } catch (error) {
+    return c.json({ success: false, message: "Internal server error" }, 500);
+  }
+};
+
+export const handleListModeration = async (c: Context) => {
+  try {
+    const status = c.req.query("status") || "pending";
+    const limit = Number(c.req.query("limit")) || 50;
+    const products = await listProductsByStatus(status, limit);
+    return c.json({ success: true, data: products });
+  } catch (error) {
+    console.error("[handleListModeration]", error);
+    return c.json({ success: false, message: "Internal server error" }, 500);
+  }
+};
+
+export const handleSetProductStatus = async (c: Context) => {
+  try {
+    const productId = c.req.param("productId") || "";
+    const { status, reason } = await c.req.json();
+    const product = await setProductStatus(productId, status, reason);
+    return c.json({ success: true, data: product });
+  } catch (error: any) {
+    if (error.message === "Product does not exists") {
+      return c.json({ success: false, message: error.message }, 404);
+    }
+    if (error.message === "INVALID_STATUS") {
+      return c.json({ success: false, message: error.message }, 400);
+    }
     return c.json({ success: false, message: "Internal server error" }, 500);
   }
 };

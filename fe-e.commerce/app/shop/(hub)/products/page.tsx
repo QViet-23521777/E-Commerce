@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -9,205 +9,319 @@ import {
   ChevronDown,
   Edit2,
   Trash2,
-  Eye,
-  EyeOff,
   X,
   Camera,
   Check,
   Package,
   AlertTriangle,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
+import { getUser } from "@/lib/auth";
+import { formatVND, type BackendProduct } from "@/lib/products";
+import {
+  fetchSellerInventory,
+  updateInventoryQuantity,
+  deleteInventory,
+  createListing,
+  type InventoryItem,
+} from "@/lib/seller";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-type ProductStatus = "active" | "out_of_stock" | "pending" | "hidden";
+type ProductStatus = "active" | "out_of_stock";
 
-interface Product {
-  id: string;
+interface Row {
+  inventoryId: string;
+  productId: string;
   name: string;
-  sku: string;
   category: string;
   price: number;
   salePrice?: number;
   stock: number;
   status: ProductStatus;
+  approval: "pending" | "approved" | "rejected";
+  rejectionReason?: string;
   image: string;
+  description: string;
 }
 
-const INITIAL_PRODUCTS: Product[] = [
-  { id: "p1", name: "V60 Ceramic Dripper", sku: "SKU-001", category: "Drinkware", price: 145, stock: 12, status: "active", image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDuYPHC5ZucXkMLQdPzRtMwA5fwVf4vodbpXzIAj1S6x4XKjM2fAlF7-u-Z-AU3MWyNLivbqT5NJVyhECEfYebs0h9qutzgtz955zo46r6UKJ_32aNcoy_7_fNGgqJzQY7CDeFPibKGTiQOwhV3lPfA9eC6I9W4_XCDYFh4FgdiwfC_x7VTV8hox8fmMw3BIDeUe8i7OCB11qcswwjZTdPA83Cj2SJY5IbVEXpLsg6dQg6vLyyj5o-lN_LUe6-ocebtxqygqhHLieN3" },
-  { id: "p2", name: "Cylindrical Tumbler Set", sku: "SKU-002", category: "Drinkware", price: 64, stock: 8, status: "active", image: "https://lh3.googleusercontent.com/aida-public/AB6AXuAgZgxJBL_cQBXBw5VzGLXPpgE5RrL1cjMbWzL19VtO-XmfNNZV1pTCD8rc39nQXx99rcFwYIBT_DXnucwl9RgW8yKfo4HhdOSq_L0oCSntd6PaPXphuxOKKyW1xWwfBGwb72fuxp_0uPUaDG4DJGiKGwxMoyC3d6Miv61WWKFUAWGd3H-IlEY28QsPuHJioAksGYxaOHKRI2Qg3AG52p3ws5sxT3xorquBUeftVmdxuHfT73crxvuynz2znqMFjVdss1scuZQ8o4Nz" },
-  { id: "p3", name: "Task Lamp T-1", sku: "SKU-019", category: "Lighting", price: 280, stock: 4, status: "active", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Lamp" },
-  { id: "p4", name: "Wool Throw Blanket", sku: "SKU-031", category: "Textiles", price: 189, stock: 0, status: "out_of_stock", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Blanket" },
-  { id: "p5", name: "Ceramic Serving Bowl", sku: "SKU-012", category: "Kitchenware", price: 98, stock: 15, status: "active", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Bowl" },
-  { id: "p6", name: "Copper Pour-Over Set", sku: "SKU-008", category: "Drinkware", price: 220, salePrice: 180, stock: 1, status: "active", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Pour" },
-  { id: "p7", name: "Linen Pillow Cover", sku: "SKU-044", category: "Textiles", price: 45, stock: 32, status: "active", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Pillow" },
-  { id: "p8", name: "Bamboo Cutting Board", sku: "SKU-025", category: "Kitchenware", price: 75, stock: 0, status: "out_of_stock", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Board" },
-  { id: "p9", name: "Stone Coasters Set", sku: "SKU-037", category: "Decor", price: 55, stock: 22, status: "hidden", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Coasters" },
-  { id: "p10", name: "Nordic Wall Clock", sku: "SKU-052", category: "Decor", price: 175, stock: 7, status: "pending", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Clock" },
-  { id: "p11", name: "Glass Carafe 1L", sku: "SKU-015", category: "Drinkware", price: 88, stock: 0, status: "out_of_stock", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Carafe" },
-  { id: "p12", name: "Linen Table Runner", sku: "SKU-061", category: "Textiles", price: 68, stock: 11, status: "pending", image: "https://placehold.co/80x80/e2e2e2/6a7a7b?text=Runner" },
+const FALLBACK_IMG = "https://placehold.co/80x80/e2e2e2/6a7a7b?text=IMG";
+
+function toRow(inv: InventoryItem): Row {
+  const p = (typeof inv.productId === "object" && inv.productId
+    ? inv.productId
+    : null) as BackendProduct | null;
+  const price = Number(p?.price ?? 0);
+  const sale = Number(p?.sale ?? 0);
+  const salePrice = sale > 0 ? Math.round(price * (1 - sale / 100)) : undefined;
+  const approval = (p?.status as Row["approval"]) ?? "approved";
+  return {
+    inventoryId: inv._id,
+    productId: p?._id ?? (typeof inv.productId === "string" ? inv.productId : ""),
+    name: p?.name || inv.name || "Unnamed product",
+    category: p?.type || "Other",
+    price,
+    salePrice,
+    stock: inv.quantity ?? 0,
+    status: (inv.quantity ?? 0) === 0 ? "out_of_stock" : "active",
+    approval,
+    rejectionReason: p?.rejectionReason,
+    image: p?.imageUrl?.trim() ? p.imageUrl : FALLBACK_IMG,
+    description: p?.description || "",
+  };
+}
+
+const SORT_OPTIONS = [
+  "Name A–Z",
+  "Name Z–A",
+  "Price: Low–High",
+  "Price: High–Low",
+  "Stock: Low–High",
 ];
 
-const CATEGORIES = ["All", "Drinkware", "Lighting", "Textiles", "Kitchenware", "Decor"];
-const SORT_OPTIONS = ["Name A–Z", "Name Z–A", "Price: Low–High", "Price: High–Low", "Stock: Low–High"];
-
-type TabId = "all" | "active" | "out_of_stock" | "pending" | "hidden";
+type TabId = "all" | "active" | "pending" | "rejected";
 const TABS: { id: TabId; label: string }[] = [
   { id: "all", label: "All" },
   { id: "active", label: "Active" },
-  { id: "out_of_stock", label: "Out of Stock" },
-  { id: "pending", label: "Pending" },
-  { id: "hidden", label: "Hidden" },
+  { id: "pending", label: "Pending Approval" },
+  { id: "rejected", label: "Rejected" },
 ];
 
-const STATUS_BADGE: Record<ProductStatus, string> = {
-  active: "bg-primary/10 text-primary border-primary/20",
-  out_of_stock: "bg-red-50 text-red-700 border-red-200",
-  pending: "bg-amber-50 text-amber-700 border-amber-200",
-  hidden: "bg-surface-container text-on-surface-variant border-outline-variant",
-};
+const TYPE_OPTIONS = [
+  "Drinkware",
+  "Lighting",
+  "Textiles",
+  "Kitchenware",
+  "Decor",
+  "Electronics",
+  "Fashion",
+  "Other",
+];
 
-const STATUS_LABEL: Record<ProductStatus, string> = {
-  active: "Active",
-  out_of_stock: "Out of Stock",
-  pending: "Pending",
-  hidden: "Hidden",
-};
-
-interface DrawerProduct {
-  id?: string;
+// Drawer for create (full product) / edit (stock only — no backend product-edit).
+interface DrawerState {
+  mode: "create" | "edit";
+  inventoryId?: string;
   name: string;
   category: string;
   description: string;
   price: string;
-  salePrice: string;
   stock: string;
-  status: ProductStatus;
-  images: string[];
+  imageMode: "upload" | "url";
+  imageFile: File | null;
+  imageUrl: string;
+  imagePreview: string;
 }
 
-const EMPTY_DRAWER: DrawerProduct = {
+const EMPTY_DRAWER: DrawerState = {
+  mode: "create",
   name: "",
   category: "Drinkware",
   description: "",
   price: "",
-  salePrice: "",
   stock: "",
-  status: "active",
-  images: ["", "", "", "", ""],
+  imageMode: "upload",
+  imageFile: null,
+  imageUrl: "",
+  imagePreview: "",
 };
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [sellerId, setSellerId] = useState("");
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
   const [sortBy, setSortBy] = useState("Name A–Z");
+
   const [showDrawer, setShowDrawer] = useState(false);
-  const [drawerProduct, setDrawerProduct] = useState<DrawerProduct>(EMPTY_DRAWER);
+  const [drawer, setDrawer] = useState<DrawerState>(EMPTY_DRAWER);
+  const [drawerError, setDrawerError] = useState("");
+  const [drawerSaving, setDrawerSaving] = useState(false);
   const [drawerSaved, setDrawerSaved] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const [deleteRow, setDeleteRow] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const load = useCallback(async (sid: string) => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const inv = await fetchSellerInventory(sid);
+      setRows(inv.map(toRow));
+    } catch (err: unknown) {
+      setLoadError((err as { message?: string })?.message ?? "Couldn't load your products.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const u = getUser();
+    if (!u?.userId) { setLoading(false); setLoadError("Not signed in."); return; }
+    setSellerId(u.userId);
+    load(u.userId);
+  }, [load]);
 
   function openCreate() {
-    setDrawerProduct(EMPTY_DRAWER);
+    setDrawer({ ...EMPTY_DRAWER, mode: "create" });
+    setDrawerError("");
     setDrawerSaved(false);
     setShowDrawer(true);
   }
 
-  function openEdit(p: Product) {
-    setDrawerProduct({
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      description: "",
-      price: String(p.price),
-      salePrice: p.salePrice ? String(p.salePrice) : "",
-      stock: String(p.stock),
-      status: p.status,
-      images: [p.image, "", "", "", ""],
+  function openEdit(r: Row) {
+    setDrawer({
+      mode: "edit",
+      inventoryId: r.inventoryId,
+      name: r.name,
+      category: r.category,
+      description: r.description,
+      price: String(r.price),
+      stock: String(r.stock),
+      imageMode: "upload",
+      imageFile: null,
+      imageUrl: "",
+      imagePreview: r.image,
     });
+    setDrawerError("");
     setDrawerSaved(false);
     setShowDrawer(true);
   }
 
-  function handleSaveProduct() {
-    if (!drawerProduct.name || !drawerProduct.price) return;
-    const price = parseFloat(drawerProduct.price) || 0;
-    const stock = parseInt(drawerProduct.stock) || 0;
-    const mainImage = drawerProduct.images[0] || "https://placehold.co/80x80/e2e2e2/6a7a7b?text=IMG";
-
-    if (drawerProduct.id) {
-      setProducts((prev) =>
-        prev.map((p) =>
-          p.id === drawerProduct.id
-            ? { ...p, name: drawerProduct.name, category: drawerProduct.category, price, stock, status: stock === 0 ? "out_of_stock" : drawerProduct.status, salePrice: drawerProduct.salePrice ? parseFloat(drawerProduct.salePrice) : undefined, image: mainImage }
-            : p
-        )
-      );
-    } else {
-      const newId = `p${Date.now()}`;
-      setProducts((prev) => [
-        {
-          id: newId,
-          name: drawerProduct.name,
-          sku: `SKU-${Math.floor(Math.random() * 900 + 100)}`,
-          category: drawerProduct.category,
-          price,
-          salePrice: drawerProduct.salePrice ? parseFloat(drawerProduct.salePrice) : undefined,
-          stock,
-          status: stock === 0 ? "out_of_stock" : drawerProduct.status,
-          image: mainImage,
-        },
-        ...prev,
-      ]);
+  function onPickImage(file: File | null) {
+    if (!file) {
+      setDrawer((d) => ({ ...d, imageFile: null, imagePreview: "" }));
+      return;
     }
-    setDrawerSaved(true);
-    setTimeout(() => setShowDrawer(false), 800);
+    const preview = URL.createObjectURL(file);
+    setDrawer((d) => ({ ...d, imageFile: file, imagePreview: preview }));
   }
 
-  function handleDelete(id: string) {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-    setDeleteId(null);
+  function onPickImageUrl(url: string) {
+    // Live-preview the pasted URL; the <img> onError handles bad links.
+    setDrawer((d) => ({ ...d, imageUrl: url, imagePreview: url.trim() }));
   }
 
-  function toggleVisibility(id: string) {
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, status: p.status === "hidden" ? "active" : "hidden" }
-          : p
+  function setImageMode(mode: "upload" | "url") {
+    // Switching source clears the other source's preview to avoid confusion.
+    setDrawer((d) => ({
+      ...d,
+      imageMode: mode,
+      imageFile: null,
+      imageUrl: "",
+      imagePreview: mode === "url" ? "" : "",
+    }));
+  }
+
+  async function handleSaveDrawer() {
+    setDrawerError("");
+    if (drawer.mode === "edit") {
+      // Backend only supports updating the stock quantity for an existing listing.
+      const qty = parseInt(drawer.stock, 10);
+      if (isNaN(qty) || qty < 0) { setDrawerError("Enter a valid stock quantity."); return; }
+      setDrawerSaving(true);
+      try {
+        await updateInventoryQuantity(drawer.inventoryId!, qty);
+        setRows((prev) =>
+          prev.map((r) =>
+            r.inventoryId === drawer.inventoryId
+              ? { ...r, stock: qty, status: qty === 0 ? "out_of_stock" : "active" }
+              : r,
+          ),
+        );
+        setDrawerSaved(true);
+        setTimeout(() => setShowDrawer(false), 700);
+      } catch (err: unknown) {
+        setDrawerError((err as { message?: string })?.message ?? "Couldn't update stock.");
+      } finally {
+        setDrawerSaving(false);
+      }
+      return;
+    }
+
+    // Create flow
+    const price = parseFloat(drawer.price);
+    const stock = parseInt(drawer.stock, 10);
+    if (!drawer.name.trim()) { setDrawerError("Product name is required."); return; }
+    if (!drawer.description.trim()) { setDrawerError("Description is required."); return; }
+    if (isNaN(price) || price <= 0) { setDrawerError("Enter a valid price."); return; }
+    if (isNaN(stock) || stock < 1) { setDrawerError("Initial stock must be at least 1."); return; }
+    // Image is optional. If the URL mode is used with a non-empty value, sanity-check it.
+    const trimmedUrl = drawer.imageUrl.trim();
+    if (drawer.imageMode === "url" && trimmedUrl && !/^https?:\/\//i.test(trimmedUrl)) {
+      setDrawerError("Image URL must start with http:// or https://.");
+      return;
+    }
+
+    setDrawerSaving(true);
+    try {
+      await createListing(sellerId, {
+        name: drawer.name.trim(),
+        description: drawer.description.trim(),
+        price,
+        type: drawer.category,
+        quantity: stock,
+        image: drawer.imageMode === "upload" ? drawer.imageFile ?? undefined : undefined,
+        imageUrl: drawer.imageMode === "url" ? trimmedUrl || undefined : undefined,
+      });
+      setDrawerSaved(true);
+      await load(sellerId);
+      setTimeout(() => setShowDrawer(false), 700);
+    } catch (err: unknown) {
+      setDrawerError((err as { message?: string })?.message ?? "Couldn't create product.");
+    } finally {
+      setDrawerSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteRow) return;
+    setDeleting(true);
+    try {
+      await deleteInventory(deleteRow.inventoryId);
+      setRows((prev) => prev.filter((r) => r.inventoryId !== deleteRow.inventoryId));
+      setDeleteRow(null);
+    } catch {
+      // keep modal open on failure
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const categories = useMemo(() => {
+    const set = new Set(rows.map((r) => r.category).filter(Boolean));
+    return ["All", ...Array.from(set)];
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    return rows
+      .filter((r) => (activeTab === "all" ? true : r.approval === activeTab))
+      .filter((r) => filterCategory === "All" || r.category === filterCategory)
+      .filter(
+        (r) =>
+          search === "" ||
+          r.name.toLowerCase().includes(search.toLowerCase()),
       )
-    );
-  }
-
-  const filtered = products
-    .filter((p) => {
-      if (activeTab === "out_of_stock") return p.status === "out_of_stock";
-      if (activeTab !== "all") return p.status === activeTab;
-      return true;
-    })
-    .filter((p) => filterCategory === "All" || p.category === filterCategory)
-    .filter((p) =>
-      search === "" ||
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase())
-    )
-    .sort((a, b) => {
-      if (sortBy === "Name A–Z") return a.name.localeCompare(b.name);
-      if (sortBy === "Name Z–A") return b.name.localeCompare(a.name);
-      if (sortBy === "Price: Low–High") return a.price - b.price;
-      if (sortBy === "Price: High–Low") return b.price - a.price;
-      if (sortBy === "Stock: Low–High") return a.stock - b.stock;
-      return 0;
-    });
+      .sort((a, b) => {
+        if (sortBy === "Name A–Z") return a.name.localeCompare(b.name);
+        if (sortBy === "Name Z–A") return b.name.localeCompare(a.name);
+        if (sortBy === "Price: Low–High") return a.price - b.price;
+        if (sortBy === "Price: High–Low") return b.price - a.price;
+        if (sortBy === "Stock: Low–High") return a.stock - b.stock;
+        return 0;
+      });
+  }, [rows, activeTab, filterCategory, search, sortBy]);
 
   const tabCounts: Record<TabId, number> = {
-    all: products.length,
-    active: products.filter((p) => p.status === "active").length,
-    out_of_stock: products.filter((p) => p.status === "out_of_stock").length,
-    pending: products.filter((p) => p.status === "pending").length,
-    hidden: products.filter((p) => p.status === "hidden").length,
+    all: rows.length,
+    active: rows.filter((r) => r.approval === "approved").length,
+    pending: rows.filter((r) => r.approval === "pending").length,
+    rejected: rows.filter((r) => r.approval === "rejected").length,
   };
 
   return (
@@ -224,13 +338,22 @@ export default function ProductsPage() {
               Product Management
             </h1>
           </div>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 h-10 px-5 bg-primary-container text-deep-navy text-sm font-bold rounded-xl border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all duration-150"
-          >
-            <Plus className="w-4 h-4" />
-            Add Product
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => sellerId && load(sellerId)}
+              className="flex items-center gap-2 h-10 px-4 border-2 border-deep-navy/20 text-deep-navy text-sm font-bold rounded-xl hover:border-deep-navy active:scale-[0.97] transition-all duration-150"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 h-10 px-5 bg-primary-container text-deep-navy text-sm font-bold rounded-xl border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all duration-150"
+            >
+              <Plus className="w-4 h-4" />
+              Add Product
+            </button>
+          </div>
         </div>
 
         {/* Tab bar */}
@@ -245,8 +368,7 @@ export default function ProductsPage() {
                   : "text-on-surface-variant hover:text-deep-navy hover:bg-surface-container-low"
               }`}
             >
-              <span className="hidden sm:inline">{tab.label}</span>
-              <span className="sm:hidden">{tab.label.split(" ")[0]}</span>
+              <span>{tab.label}</span>
               <span
                 className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
                   activeTab === tab.id
@@ -268,7 +390,7 @@ export default function ProductsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or SKU…"
+              placeholder="Search by name…"
               className="w-full h-10 pl-10 pr-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface placeholder:text-outline focus:border-primary-container outline-none transition-colors"
             />
           </div>
@@ -280,7 +402,7 @@ export default function ProductsPage() {
               onChange={(e) => setFilterCategory(e.target.value)}
               className="h-10 pl-8 pr-8 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none appearance-none cursor-pointer"
             >
-              {CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </select>
@@ -302,16 +424,31 @@ export default function ProductsPage() {
         </div>
 
         {/* Products table */}
-        <motion.div
-          layout
-          className="bg-white border-2 border-deep-navy rounded-xl overflow-hidden"
-        >
-          {filtered.length === 0 ? (
+        <motion.div layout className="bg-white border-2 border-deep-navy rounded-xl overflow-hidden">
+          {loading ? (
+            <div className="py-16 flex flex-col items-center text-center text-on-surface-variant">
+              <Loader2 className="w-7 h-7 animate-spin mb-3" />
+              <p className="text-sm">Loading your products…</p>
+            </div>
+          ) : loadError ? (
+            <div className="py-16 flex flex-col items-center text-center">
+              <AlertTriangle className="w-9 h-9 text-amber-500 mb-3" />
+              <p className="font-semibold text-on-surface">{loadError}</p>
+              <button
+                onClick={() => sellerId && load(sellerId)}
+                className="mt-3 text-sm font-bold text-primary hover:underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="py-16 flex flex-col items-center text-center">
               <Package className="w-10 h-10 text-outline mb-3" />
               <p className="font-semibold text-on-surface">No products found</p>
               <p className="text-sm text-on-surface-variant mt-1">
-                Try adjusting your filters or add a new product
+                {rows.length === 0
+                  ? "Add your first product to start selling."
+                  : "Try adjusting your filters."}
               </p>
             </div>
           ) : (
@@ -319,7 +456,7 @@ export default function ProductsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-surface-container-low border-b border-outline-variant">
-                    {["Product", "Category", "Price", "Stock", "Status", "Actions"].map((h) => (
+                    {["Product", "Category", "Price", "Stock", "Approval", "Actions"].map((h) => (
                       <th
                         key={h}
                         className="text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant px-4 py-3 first:pl-5"
@@ -331,9 +468,9 @@ export default function ProductsPage() {
                 </thead>
                 <AnimatePresence initial={false}>
                   <tbody className="divide-y divide-outline-variant">
-                    {filtered.map((product) => (
+                    {filtered.map((r) => (
                       <motion.tr
-                        key={product.id}
+                        key={r.inventoryId}
                         layout
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -343,36 +480,36 @@ export default function ProductsPage() {
                       >
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-3">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={product.image}
-                              alt={product.name}
+                              src={r.image}
+                              alt={r.name}
                               className="w-10 h-10 rounded-lg object-cover border border-outline-variant shrink-0"
                               onError={(e) => {
-                                (e.target as HTMLImageElement).src =
-                                  "https://placehold.co/40x40/e2e2e2/6a7a7b?text=IMG";
+                                (e.target as HTMLImageElement).src = FALLBACK_IMG;
                               }}
                             />
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-deep-navy truncate max-w-[160px]">
-                                {product.name}
+                              <p className="text-sm font-semibold text-deep-navy truncate max-w-[180px] capitalize">
+                                {r.name}
                               </p>
-                              <p className="text-[10px] text-on-surface-variant font-mono">
-                                {product.sku}
+                              <p className="text-[10px] text-on-surface-variant font-mono truncate max-w-[180px]">
+                                {r.productId.slice(-8)}
                               </p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-on-surface-variant">
-                          {product.category}
+                        <td className="px-4 py-3.5 text-sm text-on-surface-variant capitalize">
+                          {r.category}
                         </td>
                         <td className="px-4 py-3.5">
                           <div>
                             <span className="text-sm font-bold text-deep-navy">
-                              ${product.salePrice ?? product.price}
+                              {formatVND(r.salePrice ?? r.price)}
                             </span>
-                            {product.salePrice && (
+                            {r.salePrice !== undefined && (
                               <span className="ml-1.5 text-xs text-outline line-through">
-                                ${product.price}
+                                {formatVND(r.price)}
                               </span>
                             )}
                           </div>
@@ -380,48 +517,48 @@ export default function ProductsPage() {
                         <td className="px-4 py-3.5">
                           <span
                             className={`text-sm font-semibold ${
-                              product.stock === 0
+                              r.stock === 0
                                 ? "text-red-600"
-                                : product.stock <= 5
+                                : r.stock <= 5
                                 ? "text-amber-600"
                                 : "text-on-surface"
                             }`}
                           >
-                            {product.stock === 0 ? "—" : product.stock}
+                            {r.stock === 0 ? "—" : r.stock}
                           </span>
-                          {product.stock > 0 && product.stock <= 5 && (
+                          {r.stock > 0 && r.stock <= 5 && (
                             <AlertTriangle className="inline w-3 h-3 text-amber-500 ml-1" />
                           )}
                         </td>
                         <td className="px-4 py-3.5">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-1 rounded-full border ${STATUS_BADGE[product.status]}`}
-                          >
-                            {STATUS_LABEL[product.status]}
-                          </span>
+                          {r.approval === "approved" ? (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-full border bg-primary/10 text-primary border-primary/20">
+                              {r.status === "out_of_stock" ? "Out of Stock" : "Active"}
+                            </span>
+                          ) : r.approval === "pending" ? (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+                              Waiting Approval
+                            </span>
+                          ) : (
+                            <span
+                              title={r.rejectionReason || "Rejected"}
+                              className="text-[10px] font-bold px-2 py-1 rounded-full border bg-red-50 text-red-700 border-red-200 cursor-help"
+                            >
+                              Rejected
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => openEdit(product)}
+                              onClick={() => openEdit(r)}
                               className="p-1.5 rounded-lg text-on-surface-variant hover:text-deep-navy hover:bg-surface-container transition-colors"
-                              title="Edit"
+                              title="Update stock"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => toggleVisibility(product.id)}
-                              className="p-1.5 rounded-lg text-on-surface-variant hover:text-deep-navy hover:bg-surface-container transition-colors"
-                              title={product.status === "hidden" ? "Show" : "Hide"}
-                            >
-                              {product.status === "hidden" ? (
-                                <Eye className="w-3.5 h-3.5" />
-                              ) : (
-                                <EyeOff className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() => setDeleteId(product.id)}
+                              onClick={() => setDeleteRow(r)}
                               className="p-1.5 rounded-lg text-on-surface-variant hover:text-red-600 hover:bg-red-50 transition-colors"
                               title="Delete"
                             >
@@ -441,14 +578,14 @@ export default function ProductsPage() {
 
       {/* Delete confirm */}
       <AnimatePresence>
-        {deleteId && (
+        {deleteRow && (
           <>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-40 bg-black/40"
-              onClick={() => setDeleteId(null)}
+              onClick={() => !deleting && setDeleteRow(null)}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -460,22 +597,24 @@ export default function ProductsPage() {
               <div className="w-10 h-10 bg-red-50 border border-red-200 rounded-xl flex items-center justify-center mb-4">
                 <Trash2 className="w-5 h-5 text-red-600" />
               </div>
-              <h3 className="font-bold text-deep-navy mb-1">Delete Product?</h3>
+              <h3 className="font-bold text-deep-navy mb-1">Delete Listing?</h3>
               <p className="text-sm text-on-surface-variant mb-5">
-                This action cannot be undone. The product will be permanently removed from your store.
+                This removes <span className="font-semibold capitalize">{deleteRow.name}</span> from your store. This cannot be undone.
               </p>
               <div className="flex gap-3">
                 <button
-                  onClick={() => setDeleteId(null)}
-                  className="flex-1 h-10 border-2 border-deep-navy/20 rounded-xl text-sm font-semibold text-on-surface-variant hover:border-deep-navy transition-colors"
+                  onClick={() => setDeleteRow(null)}
+                  disabled={deleting}
+                  className="flex-1 h-10 border-2 border-deep-navy/20 rounded-xl text-sm font-semibold text-on-surface-variant hover:border-deep-navy transition-colors disabled:opacity-60"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleDelete(deleteId)}
-                  className="flex-1 h-10 bg-red-600 border-2 border-transparent text-white text-sm font-bold rounded-xl hover:bg-red-700 active:scale-[0.97] transition-all"
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  className="flex-1 h-10 bg-red-600 border-2 border-transparent text-white text-sm font-bold rounded-xl hover:bg-red-700 active:scale-[0.97] transition-all disabled:opacity-60"
                 >
-                  Delete
+                  {deleting ? "Deleting…" : "Delete"}
                 </button>
               </div>
             </motion.div>
@@ -492,7 +631,7 @@ export default function ProductsPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-40 bg-black/40"
-              onClick={() => setShowDrawer(false)}
+              onClick={() => !drawerSaving && setShowDrawer(false)}
             />
             <motion.aside
               initial={{ x: "100%" }}
@@ -505,10 +644,10 @@ export default function ProductsPage() {
               <div className="flex items-center justify-between px-6 py-5 border-b-2 border-deep-navy shrink-0">
                 <div>
                   <p className="text-label-caps text-primary mb-0.5">
-                    {drawerProduct.id ? "Edit" : "Create"}
+                    {drawer.mode === "edit" ? "Update Stock" : "Create"}
                   </p>
                   <h2 className="font-bold text-deep-navy">
-                    {drawerProduct.id ? "Edit Product" : "New Product"}
+                    {drawer.mode === "edit" ? "Update Stock" : "New Product"}
                   </h2>
                 </div>
                 <button
@@ -521,69 +660,90 @@ export default function ProductsPage() {
 
               {/* Drawer body */}
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-                {/* Image slots */}
+                {drawer.mode === "edit" && (
+                  <div className="p-3 bg-surface-container-low border border-outline-variant rounded-xl text-xs text-on-surface-variant leading-relaxed">
+                    Only stock quantity can be changed for an existing listing.
+                    To change product details, delete and re-create the listing.
+                  </div>
+                )}
+
+                {/* Image */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2.5">
-                    Product Images
-                    <span className="ml-2 font-normal text-outline normal-case tracking-normal">
-                      paste image URLs · up to 5
-                    </span>
+                    Product Image
                   </label>
-                  <div className="space-y-2.5">
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <div key={i} className="flex gap-2.5 items-center">
-                        <div className="w-14 h-14 rounded-xl border-2 border-deep-navy/20 overflow-hidden shrink-0 bg-surface-container-low flex items-center justify-center">
-                          {drawerProduct.images[i] ? (
-                            <img
-                              src={drawerProduct.images[i]}
-                              alt={`Image ${i + 1}`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = "none";
-                              }}
-                            />
-                          ) : (
-                            <Camera className="w-4 h-4 text-outline" />
-                          )}
+                  <div className="flex gap-3 items-start">
+                    <div className="w-20 h-20 rounded-xl border-2 border-deep-navy/20 overflow-hidden shrink-0 bg-surface-container-low flex items-center justify-center">
+                      {drawer.imagePreview ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={drawer.imagePreview}
+                          alt="preview"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = FALLBACK_IMG;
+                          }}
+                        />
+                      ) : (
+                        <Camera className="w-5 h-5 text-outline" />
+                      )}
+                    </div>
+                    {drawer.mode === "create" ? (
+                      <div className="flex-1 space-y-2.5">
+                        {/* Source toggle */}
+                        <div className="flex gap-0.5 bg-surface-container-low border-2 border-deep-navy/20 rounded-lg p-0.5">
+                          {(["upload", "url"] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setImageMode(m)}
+                              className={`flex-1 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-md transition-colors ${
+                                drawer.imageMode === m
+                                  ? "bg-primary-container text-deep-navy"
+                                  : "text-on-surface-variant hover:text-deep-navy"
+                              }`}
+                            >
+                              {m === "upload" ? "Upload" : "Image URL"}
+                            </button>
+                          ))}
                         </div>
-                        <div className="flex-1 relative">
+
+                        {drawer.imageMode === "upload" ? (
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => onPickImage(e.target.files?.[0] ?? null)}
+                            className="block w-full text-xs text-on-surface file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-2 file:border-deep-navy file:bg-white file:text-xs file:font-bold file:text-deep-navy hover:file:bg-surface-container cursor-pointer"
+                          />
+                        ) : (
                           <input
                             type="url"
-                            value={drawerProduct.images[i]}
-                            onChange={(e) =>
-                              setDrawerProduct((p) => {
-                                const imgs = [...p.images];
-                                imgs[i] = e.target.value;
-                                return { ...p, images: imgs };
-                              })
-                            }
-                            placeholder={i === 0 ? "Main image URL…" : `Additional image ${i + 1} URL…`}
-                            className="block w-full h-10 px-3 border-2 border-deep-navy/20 rounded-xl bg-white text-xs text-on-surface placeholder:text-outline focus:border-primary-container outline-none transition-colors"
+                            value={drawer.imageUrl}
+                            onChange={(e) => onPickImageUrl(e.target.value)}
+                            placeholder="https://example.com/photo.jpg"
+                            className="block w-full h-10 px-3 border-2 border-deep-navy/20 rounded-lg bg-white text-xs text-on-surface placeholder:text-outline focus:border-primary-container outline-none transition-colors"
                           />
-                          {i === 0 && (
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-bold uppercase tracking-wider text-primary">
-                              Main
-                            </span>
-                          )}
-                        </div>
+                        )}
+                        <p className="text-[11px] text-on-surface-variant leading-snug">
+                          Optional — a placeholder is used if left empty.
+                        </p>
                       </div>
-                    ))}
+                    ) : null}
                   </div>
                 </div>
 
                 {/* Name */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2">
-                    Product Name *
+                    Product Name {drawer.mode === "create" && "*"}
                   </label>
                   <input
                     type="text"
-                    value={drawerProduct.name}
-                    onChange={(e) =>
-                      setDrawerProduct((p) => ({ ...p, name: e.target.value }))
-                    }
+                    value={drawer.name}
+                    disabled={drawer.mode === "edit"}
+                    onChange={(e) => setDrawer((d) => ({ ...d, name: e.target.value }))}
                     placeholder="e.g. V60 Ceramic Dripper"
-                    className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface placeholder:text-outline focus:border-primary-container outline-none transition-colors"
+                    className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface placeholder:text-outline focus:border-primary-container outline-none transition-colors disabled:bg-surface-container-low disabled:text-on-surface-variant disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -593,130 +753,83 @@ export default function ProductsPage() {
                     Category
                   </label>
                   <select
-                    value={drawerProduct.category}
-                    onChange={(e) =>
-                      setDrawerProduct((p) => ({ ...p, category: e.target.value }))
-                    }
-                    className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none appearance-none"
+                    value={drawer.category}
+                    disabled={drawer.mode === "edit"}
+                    onChange={(e) => setDrawer((d) => ({ ...d, category: e.target.value }))}
+                    className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none appearance-none disabled:bg-surface-container-low disabled:text-on-surface-variant disabled:cursor-not-allowed"
                   >
-                    {["Drinkware", "Lighting", "Textiles", "Kitchenware", "Decor", "Other"].map(
-                      (c) => (
-                        <option key={c}>{c}</option>
-                      )
-                    )}
+                    {TYPE_OPTIONS.map((c) => (
+                      <option key={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
 
                 {/* Description */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2">
-                    Description
+                    Description {drawer.mode === "create" && "*"}
                   </label>
                   <textarea
-                    value={drawerProduct.description}
-                    onChange={(e) =>
-                      setDrawerProduct((p) => ({ ...p, description: e.target.value }))
-                    }
+                    value={drawer.description}
+                    disabled={drawer.mode === "edit"}
+                    onChange={(e) => setDrawer((d) => ({ ...d, description: e.target.value }))}
                     rows={3}
                     placeholder="Describe your product…"
-                    className="block w-full px-4 py-3 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface placeholder:text-outline focus:border-primary-container outline-none transition-colors resize-none leading-relaxed"
+                    className="block w-full px-4 py-3 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface placeholder:text-outline focus:border-primary-container outline-none transition-colors resize-none leading-relaxed disabled:bg-surface-container-low disabled:text-on-surface-variant disabled:cursor-not-allowed"
                   />
                 </div>
 
-                {/* Price row */}
+                {/* Price + Stock */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2">
-                      Price ($) *
+                      Price (₫) {drawer.mode === "create" && "*"}
                     </label>
                     <input
                       type="number"
                       min={0}
-                      step={0.01}
-                      value={drawerProduct.price}
-                      onChange={(e) =>
-                        setDrawerProduct((p) => ({ ...p, price: e.target.value }))
-                      }
-                      placeholder="0.00"
-                      className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none transition-colors"
+                      value={drawer.price}
+                      disabled={drawer.mode === "edit"}
+                      onChange={(e) => setDrawer((d) => ({ ...d, price: e.target.value }))}
+                      placeholder="0"
+                      className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none transition-colors disabled:bg-surface-container-low disabled:text-on-surface-variant disabled:cursor-not-allowed"
                     />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2">
-                      Sale Price ($)
-                      <span className="ml-1 font-normal text-outline normal-case tracking-normal">
-                        optional
-                      </span>
+                      Stock Qty {drawer.mode === "create" ? "*" : ""}
                     </label>
                     <input
                       type="number"
-                      min={0}
-                      step={0.01}
-                      value={drawerProduct.salePrice}
-                      onChange={(e) =>
-                        setDrawerProduct((p) => ({ ...p, salePrice: e.target.value }))
-                      }
-                      placeholder="0.00"
+                      min={drawer.mode === "create" ? 1 : 0}
+                      value={drawer.stock}
+                      onChange={(e) => setDrawer((d) => ({ ...d, stock: e.target.value }))}
+                      placeholder={drawer.mode === "create" ? "1" : "0"}
                       className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none transition-colors"
                     />
                   </div>
                 </div>
 
-                {/* Stock + Status */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2">
-                      Stock Qty
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={drawerProduct.stock}
-                      onChange={(e) =>
-                        setDrawerProduct((p) => ({ ...p, stock: e.target.value }))
-                      }
-                      placeholder="0"
-                      className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2">
-                      Listing Status
-                    </label>
-                    <select
-                      value={drawerProduct.status}
-                      onChange={(e) =>
-                        setDrawerProduct((p) => ({
-                          ...p,
-                          status: e.target.value as ProductStatus,
-                        }))
-                      }
-                      className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none appearance-none"
-                    >
-                      <option value="active">Active</option>
-                      <option value="hidden">Hidden</option>
-                    </select>
-                  </div>
-                </div>
+                {drawerError && (
+                  <p className="text-xs font-medium text-error">{drawerError}</p>
+                )}
               </div>
 
               {/* Drawer footer */}
               <div className="border-t-2 border-deep-navy px-6 py-4 flex gap-3 shrink-0 bg-white">
                 <button
                   onClick={() => setShowDrawer(false)}
-                  className="flex-1 h-11 border-2 border-deep-navy/20 rounded-xl text-sm font-semibold text-on-surface-variant hover:border-deep-navy transition-colors"
+                  disabled={drawerSaving}
+                  className="flex-1 h-11 border-2 border-deep-navy/20 rounded-xl text-sm font-semibold text-on-surface-variant hover:border-deep-navy transition-colors disabled:opacity-60"
                 >
                   Cancel
                 </button>
                 <motion.button
-                  onClick={handleSaveProduct}
-                  animate={
-                    drawerSaved
-                      ? { backgroundColor: "#001a41" }
-                      : { backgroundColor: "#00f3ff" }
-                  }
+                  onClick={handleSaveDrawer}
+                  disabled={drawerSaving}
+                  animate={drawerSaved ? { backgroundColor: "#001a41" } : { backgroundColor: "#00f3ff" }}
                   transition={{ duration: 0.25, ease: EASE }}
-                  className="flex-1 h-11 rounded-xl text-sm font-bold border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all duration-150"
+                  className="flex-1 h-11 rounded-xl text-sm font-bold border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all duration-150 disabled:opacity-70"
                 >
                   <AnimatePresence mode="wait">
                     {drawerSaved ? (
@@ -736,9 +849,12 @@ export default function ProductsPage() {
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -4 }}
-                        className="text-deep-navy"
+                        className="flex items-center justify-center gap-2 text-deep-navy"
                       >
-                        {drawerProduct.id ? "Save Changes" : "Create Product"}
+                        {drawerSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {drawer.mode === "edit"
+                          ? drawerSaving ? "Saving…" : "Update Stock"
+                          : drawerSaving ? "Creating…" : "Create Product"}
                       </motion.span>
                     )}
                   </AnimatePresence>

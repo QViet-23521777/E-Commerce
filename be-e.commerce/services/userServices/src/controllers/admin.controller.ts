@@ -3,10 +3,25 @@ import {
   verifyAdmin,
   banUser,
   adminLogin,
+  adminSecondFactorAuth,
 } from "../services/admin.services";
 import { Context } from "hono";
 import { mailClient } from "../utils/mailClient";
 import { User } from "../models/userModel";
+
+const ADMIN_HTTP_STATUS: Record<string, number> = {
+  INVALID_CREDENTIALS: 401,
+  NOT_AN_ADMIN: 403,
+  USER_NOT_FOUND: 404,
+  OTP_REQUIRED: 400,
+  INVALID_OTP: 400,
+};
+
+function handleAdminError(c: Context, error: unknown) {
+  const message = error instanceof Error ? error.message : "SERVER_ERROR";
+  const status = ADMIN_HTTP_STATUS[message] ?? 400;
+  return c.json({ success: false, message }, status as any);
+}
 
 export const createAdminController = async (c: Context) => {
   try {
@@ -15,9 +30,6 @@ export const createAdminController = async (c: Context) => {
       c.req.header("x-forwarded-for")?.split(",")[0].trim() ||
       c.env?.remoteAddr ||
       "";
-    if (!superAdminId) {
-      return c.json({ success: false, message: "Unauthorized" }, 401);
-    }
     const { adminInvite, token } = await createAdmin(
       name,
       email,
@@ -68,9 +80,57 @@ export const banUserController = async (c: Context) => {
 export const adminLoginController = async (c: Context) => {
   try {
     const { email, password } = await c.req.json();
-    const result = await adminLogin(email, password);
-    return c.json({ success: true, data: result }, 200);
-  } catch (error: any) {
-    return c.json({ success: false, message: error.message }, 400);
+    const { user, otp, twoFactorEnabled, tokens, role } = await adminLogin(
+      email,
+      password,
+    );
+    if (twoFactorEnabled && otp) {
+      mailClient
+        .sendLoginEmail(
+          user.email,
+          user.name,
+          otp,
+          new Date(Date.now() + 300000).toISOString(),
+        )
+        .catch(() => {});
+    }
+    return c.json(
+      {
+        success: true,
+        message: twoFactorEnabled
+          ? "OTP sent to admin email"
+          : "Admin logged in successfully",
+        data: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role,
+          twoFactorEnabled,
+        },
+        // Present only when 2FA is disabled — lets the client skip the OTP step.
+        tokens: tokens ?? undefined,
+      },
+      200,
+    );
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+};
+
+export const adminSecondFactorAuthController = async (c: Context) => {
+  try {
+    const { userId, otp } = await c.req.json();
+    const { user, tokens, role } = await adminSecondFactorAuth(userId, otp);
+    return c.json(
+      {
+        success: true,
+        message: "Admin 2FA successful",
+        data: { id: user._id, name: user.name, email: user.email, role },
+        tokens,
+      },
+      200,
+    );
+  } catch (error) {
+    return handleAdminError(c, error);
   }
 };

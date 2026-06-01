@@ -12,7 +12,7 @@ import mongoose from "mongoose";
 const seedSuperAdmin = async () => {
   try {
     console.log("Connecting to database...");
-    await mongoose.connect("mongodb://localhost:27018/ecommerce_users");
+    await mongoose.connect(process.env.MONGODB_URI || "mongodb://mongodb:27017/ecommerce_users");
     console.log("Connected to MongoDB");
 
     const role = await Role.findOne({ name: "superadmin" });
