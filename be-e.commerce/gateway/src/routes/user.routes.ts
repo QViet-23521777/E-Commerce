@@ -57,4 +57,24 @@ router.delete("/profile", authenticate, (c) =>
   Request(c, `${BASE}/api/users/profile`, "DELETE"),
 );
 
+// ── Wishlist ────────────────────────────────────────────────────────────────
+router.get("/wishlist", authenticate, (c) =>
+  Request(c, `${BASE}/api/users/wishlist`, "GET"),
+);
+router.post("/wishlist", authenticate, (c) =>
+  Request(c, `${BASE}/api/users/wishlist`, "POST"),
+);
+router.delete("/wishlist/:productId", authenticate, (c) => {
+  const productId = c.req.param("productId");
+  return Request(c, `${BASE}/api/users/wishlist/${productId}`, "DELETE");
+});
+
+// ── Address book ──────────────────────────────────────────────────────────────
+router.get("/addresses", authenticate, (c) =>
+  Request(c, `${BASE}/api/users/addresses`, "GET"),
+);
+router.put("/addresses", authenticate, (c) =>
+  Request(c, `${BASE}/api/users/addresses`, "PUT"),
+);
+
 export default router;

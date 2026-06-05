@@ -1,4 +1,10 @@
-import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from "./auth";
+import { getAccessToken, getRefreshToken, saveTokens, clearTokens, currentKind } from "./auth";
+
+const LOGIN_BY_KIND = {
+  user: "/login",
+  shop: "/shop/login",
+  admin: "/admin/login",
+} as const;
 
 const _envUrl = process.env.NEXT_PUBLIC_API_URL;
 const BASE = _envUrl && _envUrl.startsWith("http") ? _envUrl : "http://localhost:3000";
@@ -47,7 +53,9 @@ export async function apiRequest<T = unknown>(
     const newToken = await refreshAccessToken();
     if (newToken) return apiRequest<T>(path, options, false);
     clearTokens();
-    if (typeof window !== "undefined") window.location.href = "/login";
+    if (typeof window !== "undefined") {
+      window.location.href = LOGIN_BY_KIND[currentKind()];
+    }
     throw new Error("Session expired");
   }
 

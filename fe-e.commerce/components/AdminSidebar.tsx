@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Package,
   ShieldCheck,
+  Star,
   LogOut,
   ChevronRight,
   X,
@@ -25,6 +26,7 @@ const NAV = [
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/feedback", label: "Feedback", icon: MessageSquare, badge: 8 },
   { href: "/admin/products", label: "Product Moderation", icon: Package, badge: 12 },
+  { href: "/admin/reviews", label: "Review Moderation", icon: Star },
 ];
 
 function SidebarContent({ onLinkClick }: { onLinkClick?: () => void }) {

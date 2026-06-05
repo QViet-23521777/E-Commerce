@@ -15,10 +15,12 @@ import {
   Truck,
 } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getUser } from "@/lib/auth";
 import { fetchSellerInventory, type InventoryItem } from "@/lib/seller";
-import type { BackendProduct } from "@/lib/products";
+import { formatVND, type BackendProduct } from "@/lib/products";
+import { fetchSellerOrders, FULFILLMENT_LABEL, type Order } from "@/lib/orders";
+import { monthlyRevenue, revenueSummary } from "@/lib/analytics";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -29,59 +31,6 @@ interface LowStockEntry {
   name: string;
   stock: number;
 }
-
-const MONTHLY_REVENUE = [
-  { month: "Jun", value: 6800 },
-  { month: "Jul", value: 8200 },
-  { month: "Aug", value: 7400 },
-  { month: "Sep", value: 9100 },
-  { month: "Oct", value: 11200 },
-  { month: "Nov", value: 12480 },
-];
-const MAX_REV = Math.max(...MONTHLY_REVENUE.map((r) => r.value));
-
-const RECENT_ORDERS = [
-  {
-    id: "#ORD-5821",
-    customer: "Emma Strand",
-    items: 2,
-    total: "$238",
-    date: "2h ago",
-    status: "To Confirm",
-  },
-  {
-    id: "#ORD-5820",
-    customer: "Liam Thorsen",
-    items: 1,
-    total: "$145",
-    date: "4h ago",
-    status: "To Confirm",
-  },
-  {
-    id: "#ORD-5819",
-    customer: "Ava Peterson",
-    items: 3,
-    total: "$412",
-    date: "Yesterday",
-    status: "Processing",
-  },
-  {
-    id: "#ORD-5818",
-    customer: "Noah Kim",
-    items: 1,
-    total: "$89",
-    date: "Yesterday",
-    status: "Shipped",
-  },
-  {
-    id: "#ORD-5817",
-    customer: "Sophia Berg",
-    items: 2,
-    total: "$328",
-    date: "3 days ago",
-    status: "Delivered",
-  },
-];
 
 const STATUS_META: Record<
   string,
@@ -103,7 +52,25 @@ const STATUS_META: Record<
     color: "bg-primary/10 text-primary border-primary/20",
     icon: CheckCircle2,
   },
+  Cancelled: {
+    color: "bg-red-50 text-red-700 border-red-200",
+    icon: AlertTriangle,
+  },
 };
+
+function relativeDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const diff = Date.now() - d.getTime();
+  const hrs = Math.floor(diff / 3_600_000);
+  if (hrs < 1) return "Just now";
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
 const today = new Date().toLocaleDateString("en-US", {
   weekday: "long",
@@ -115,10 +82,13 @@ export default function DashboardPage() {
   const [productCount, setProductCount] = useState<number | null>(null);
   const [lowStock, setLowStock] = useState<LowStockEntry[]>([]);
   const [invLoading, setInvLoading] = useState(true);
+  const [rating, setRating] = useState<{ avg: number; reviews: number }>({ avg: 0, reviews: 0 });
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
 
   useEffect(() => {
     const u = getUser();
-    if (!u?.userId) { setInvLoading(false); return; }
+    if (!u?.userId) { setInvLoading(false); setOrdersLoading(false); return; }
     let alive = true;
     (async () => {
       try {
@@ -141,6 +111,21 @@ export default function DashboardPage() {
             };
           });
         setLowStock(low);
+
+        // Aggregate rating across the seller's rated products.
+        let reviews = 0;
+        let weighted = 0;
+        for (const i of inv) {
+          const p =
+            typeof i.productId === "object" && i.productId
+              ? (i.productId as BackendProduct)
+              : null;
+          if (p && (p.numReviews ?? 0) > 0) {
+            reviews += p.numReviews ?? 0;
+            weighted += (p.rating ?? 0) * (p.numReviews ?? 0);
+          }
+        }
+        setRating({ avg: reviews > 0 ? weighted / reviews : 0, reviews });
       } finally {
         if (alive) setInvLoading(false);
       }
@@ -148,19 +133,41 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const o = await fetchSellerOrders();
+        if (alive) setOrders(o);
+      } finally {
+        if (alive) setOrdersLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const revenue = useMemo(() => monthlyRevenue(orders), [orders]);
+  const summary = useMemo(() => revenueSummary(orders), [orders]);
+  const MAX_REV = Math.max(1, ...revenue.map((r) => r.value));
+  const pendingOrders = orders.filter(
+    (o) => o.fulfillmentStatus === "to_confirm" || o.fulfillmentStatus === "processing",
+  );
+  const toConfirmCount = orders.filter((o) => o.fulfillmentStatus === "to_confirm").length;
+  const recentOrders = orders.slice(0, 5);
+
   const STATS = [
     {
       label: "Revenue This Month",
-      value: "$12,480",
-      sub: "+18.2% vs last month",
-      up: true,
+      value: ordersLoading ? "…" : formatVND(summary.thisMonth),
+      sub: summary.momChangePct === null ? "no prior month" : `${summary.momChangePct >= 0 ? "+" : ""}${summary.momChangePct}% vs last month`,
+      up: (summary.momChangePct ?? 0) >= 0 && summary.thisMonth > 0,
       icon: TrendingUp,
       accent: "text-green-600",
     },
     {
       label: "Pending Orders",
-      value: "8",
-      sub: "2 require confirmation",
+      value: ordersLoading ? "…" : String(pendingOrders.length),
+      sub: `${toConfirmCount} require confirmation`,
       up: false,
       icon: ShoppingBag,
       accent: "text-amber-600",
@@ -175,9 +182,9 @@ export default function DashboardPage() {
     },
     {
       label: "Average Rating",
-      value: "4.9",
-      sub: "128 reviews total",
-      up: true,
+      value: rating.reviews === 0 ? "—" : rating.avg.toFixed(1),
+      sub: `${rating.reviews} reviews total`,
+      up: false,
       icon: Star,
       accent: "text-primary",
     },
@@ -247,19 +254,25 @@ export default function DashboardPage() {
               <p className="text-label-caps text-primary mb-0.5">Trend</p>
               <h2 className="font-bold text-deep-navy">Monthly Revenue</h2>
             </div>
-            <span className="text-sm font-bold text-green-600 flex items-center gap-1 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              +18.2%
-            </span>
+            {summary.momChangePct !== null && (
+              <span className={`text-sm font-bold flex items-center gap-1 border px-2.5 py-1 rounded-full ${
+                summary.momChangePct >= 0
+                  ? "text-green-600 bg-green-50 border-green-200"
+                  : "text-red-600 bg-red-50 border-red-200"
+              }`}>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                {summary.momChangePct >= 0 ? "+" : ""}{summary.momChangePct}%
+              </span>
+            )}
           </div>
 
           <div className="flex items-end gap-2 sm:gap-3" style={{ height: 120 }}>
-            {MONTHLY_REVENUE.map((bar, i) => {
-              const isLatest = i === MONTHLY_REVENUE.length - 1;
+            {revenue.map((bar, i) => {
+              const isLatest = i === revenue.length - 1;
               const barH = Math.round((bar.value / MAX_REV) * 104);
               return (
                 <div
-                  key={bar.month}
+                  key={`${bar.month}-${i}`}
                   className="flex-1 flex flex-col items-center gap-1.5"
                 >
                   <div className="w-full flex flex-col justify-end" style={{ height: 104 }}>
@@ -287,8 +300,8 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-4 pt-4 border-t border-outline-variant flex justify-between text-xs text-on-surface-variant">
-            <span>Jun – Nov 2024</span>
-            <span className="font-bold text-deep-navy">$12,480 this month</span>
+            <span>Trailing 6 months</span>
+            <span className="font-bold text-deep-navy">{formatVND(summary.thisMonth)} this month</span>
           </div>
         </motion.div>
 
@@ -389,50 +402,61 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant">
-              {RECENT_ORDERS.map((order) => {
-                const meta = STATUS_META[order.status];
-                const StatusIcon = meta.icon;
-                return (
-                  <tr
-                    key={order.id}
-                    className="hover:bg-surface-container-low transition-colors"
-                  >
-                    <td className="px-6 py-3.5">
-                      <p className="text-sm font-bold text-deep-navy font-mono">
-                        {order.id}
-                      </p>
-                      <p className="text-[10px] text-on-surface-variant">
-                        {order.date}
-                      </p>
-                    </td>
-                    <td className="px-5 py-3.5 text-sm font-medium text-on-surface">
-                      {order.customer}
-                    </td>
-                    <td className="px-5 py-3.5 text-sm text-on-surface-variant">
-                      {order.items} item{order.items > 1 ? "s" : ""}
-                    </td>
-                    <td className="px-5 py-3.5 text-sm font-bold text-deep-navy">
-                      {order.total}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span
-                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${meta.color}`}
-                      >
-                        <StatusIcon className="w-2.5 h-2.5" />
-                        {order.status}
-                      </span>
-                    </td>
-                    <td className="pr-5 py-3.5">
-                      <Link
-                        href="/shop/orders"
-                        className="p-1.5 hover:bg-surface-container rounded-lg text-on-surface-variant hover:text-deep-navy transition-colors inline-flex"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
+              {ordersLoading ? (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-sm text-on-surface-variant">Loading orders…</td></tr>
+              ) : recentOrders.length === 0 ? (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-sm text-on-surface-variant">No orders yet.</td></tr>
+              ) : (
+                recentOrders.map((order) => {
+                  const label = FULFILLMENT_LABEL[order.fulfillmentStatus ?? "to_confirm"];
+                  const meta = STATUS_META[label] ?? STATUS_META["To Confirm"];
+                  const StatusIcon = meta.icon;
+                  const itemCount = (order.items ?? []).reduce((s, it) => s + (it.quantity ?? 0), 0);
+                  const customer =
+                    order.shippingAddress?.fullName || `Customer ${String(order.userId).slice(-4)}`;
+                  const total = order.sellerSubtotal ?? order.amount ?? 0;
+                  return (
+                    <tr
+                      key={order.orderId}
+                      className="hover:bg-surface-container-low transition-colors"
+                    >
+                      <td className="px-6 py-3.5">
+                        <p className="text-sm font-bold text-deep-navy font-mono">
+                          #{String(order.orderId).slice(0, 8)}
+                        </p>
+                        <p className="text-[10px] text-on-surface-variant">
+                          {relativeDate(order.paidAt || order.createdAt)}
+                        </p>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm font-medium text-on-surface">
+                        {customer}
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-on-surface-variant">
+                        {itemCount} item{itemCount > 1 ? "s" : ""}
+                      </td>
+                      <td className="px-5 py-3.5 text-sm font-bold text-deep-navy">
+                        {formatVND(total)}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${meta.color}`}
+                        >
+                          <StatusIcon className="w-2.5 h-2.5" />
+                          {label}
+                        </span>
+                      </td>
+                      <td className="pr-5 py-3.5">
+                        <Link
+                          href="/shop/orders"
+                          className="p-1.5 hover:bg-surface-container rounded-lg text-on-surface-variant hover:text-deep-navy transition-colors inline-flex"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

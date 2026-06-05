@@ -18,6 +18,7 @@ export interface Promotion {
   usedCount: number;
   usageLimitPerUser?: number | null;
   productIds: string[];
+  sellerId?: string | null;
 }
 
 export interface PromotionValidation {
@@ -94,4 +95,63 @@ export async function redeemPromotion(
     { method: "POST", body: { code: code.trim(), items } },
   );
   return res.data;
+}
+
+// ─── Seller voucher management (shop hub) ────────────────────────────────────
+// These hit the shared promotion CRUD endpoints. The promotion service scopes
+// a non-admin caller to their own promotions, so a shop only ever sees/edits
+// the vouchers it created.
+
+interface ListResponse<T> {
+  success: boolean;
+  items: T[];
+}
+
+export interface VoucherInput {
+  code: string;
+  title: string;
+  discountType: DiscountType;
+  discountValue: number;
+  minOrderAmount?: number;
+  startDate: string; // ISO
+  endDate: string; // ISO
+  usageLimit?: number | null;
+  productIds?: string[];
+}
+
+/** Auth required. Vouchers owned by the current shop. */
+export async function fetchMyVouchers(): Promise<Promotion[]> {
+  const res = await apiRequest<ListResponse<Promotion>>(
+    "/api/promotions?limit=100",
+    { method: "GET" },
+  );
+  return res.items ?? [];
+}
+
+/** Auth required. Create a shop voucher. Throws `{ status, message }`. */
+export async function createVoucher(input: VoucherInput): Promise<Promotion> {
+  const res = await apiRequest<DataResponse<Promotion>>("/api/promotions", {
+    method: "POST",
+    body: input,
+  });
+  return res.data;
+}
+
+/** Auth required. Update an owned voucher. */
+export async function updateVoucher(
+  id: string,
+  input: Partial<VoucherInput>,
+): Promise<Promotion> {
+  const res = await apiRequest<DataResponse<Promotion>>(
+    `/api/promotions/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: input },
+  );
+  return res.data;
+}
+
+/** Auth required. Delete an owned voucher. */
+export async function deleteVoucher(id: string): Promise<void> {
+  await apiRequest(`/api/promotions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }

@@ -14,6 +14,8 @@ services:
       - promotion-service
       - mail-service
       - chat-service
+      - cart-service
+      - support-service
     networks:
       - ecommerce-net
     restart: on-failure
@@ -84,6 +86,36 @@ services:
     restart: on-failure
     volumes:
       - ./services/chatServices/src:/app/src
+    command: npm run dev
+
+  cart-service:
+    build: ./services/cartServices
+    container_name: ecommerce-cart-service
+    ports:
+      - "3008:3008"
+    env_file: ./services/cartServices/.env.docker
+    depends_on:
+      - mongodb
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/cartServices/src:/app/src
+    command: npm run dev
+
+  support-service:
+    build: ./services/supportServices
+    container_name: ecommerce-support-service
+    ports:
+      - "3009:3009"
+    env_file: ./services/supportServices/.env.docker
+    depends_on:
+      - mongodb
+    networks:
+      - ecommerce-net
+    restart: on-failure
+    volumes:
+      - ./services/supportServices/src:/app/src
     command: npm run dev
 
   payment-service:

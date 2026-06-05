@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { getUser, clearTokens, type AuthUser } from "@/lib/auth";
 import { apiRequest } from "@/lib/api";
-import { useCart, cartCount } from "@/lib/cart";
+import { useCart, cartCount, clearLocalCart } from "@/lib/cart";
 
 const NAV_LINKS: { label: string; href: string }[] = [];
 
@@ -25,6 +25,7 @@ export default function Navbar() {
   async function handleLogout() {
     try { await apiRequest("/api/users/logout", { method: "POST" }); } catch {}
     clearTokens();
+    clearLocalCart();
     setUser(null);
     router.push("/");
   }

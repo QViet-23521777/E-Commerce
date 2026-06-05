@@ -25,6 +25,11 @@ export interface ProductReview {
   rating: number;
   text: string;
   date: string;
+  // Stable array position of this review on the product — used to address it
+  // (report / reply / moderate). Present on the storefront product payload.
+  index?: number;
+  // Seller's public response, when present.
+  reply?: { body: string; author: string; at: string } | null;
 }
 
 export interface UIProduct {
@@ -167,6 +172,65 @@ export async function searchProducts(
   };
 }
 
+// ── Storefront faceted search (filters + sort + pagination) ──────────────────
+
+export interface AdvancedSearchParams {
+  q?: string;
+  type?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minRating?: number;
+  inStock?: boolean;
+  onSale?: boolean;
+  sort?: "relevance" | "price_asc" | "price_desc" | "newest" | "rating" | "popular";
+  page?: number;
+  limit?: number;
+}
+
+export interface AdvancedSearchResult {
+  items: UIProduct[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+interface AdvancedSearchResponse {
+  success: boolean;
+  items: BackendProduct[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export async function searchProductsAdvanced(
+  params: AdvancedSearchParams,
+): Promise<AdvancedSearchResult> {
+  const sp = new URLSearchParams();
+  if (params.q) sp.set("q", params.q);
+  if (params.type) sp.set("type", params.type);
+  if (params.minPrice !== undefined) sp.set("minPrice", String(params.minPrice));
+  if (params.maxPrice !== undefined) sp.set("maxPrice", String(params.maxPrice));
+  if (params.minRating !== undefined) sp.set("minRating", String(params.minRating));
+  if (params.inStock) sp.set("inStock", "true");
+  if (params.onSale) sp.set("onSale", "true");
+  if (params.sort) sp.set("sort", params.sort);
+  sp.set("page", String(params.page ?? 1));
+  sp.set("limit", String(params.limit ?? 12));
+
+  const res = await apiRequest<AdvancedSearchResponse>(
+    `/api/products/search?${sp.toString()}`,
+  );
+  return {
+    items: (res.items ?? []).map(toUIProduct),
+    total: res.total ?? 0,
+    page: res.page ?? 1,
+    limit: res.limit ?? 12,
+    totalPages: res.totalPages ?? 1,
+  };
+}
+
 export async function fetchProductById(id: string): Promise<UIProduct | null> {
   try {
     const res = await apiRequest<SingleResponse>(
@@ -222,6 +286,24 @@ export async function fetchShopByProduct(
   } catch {
     return null;
   }
+}
+
+/**
+ * Submit a review for a catalog product. The backend appends it to the
+ * product's embedded `reviews[]` and recomputes the aggregate rating.
+ */
+export async function submitProductReview(
+  productId: string,
+  review: { rating: number; text?: string; author?: string },
+): Promise<{ rating: number; numReviews: number }> {
+  const res = await apiRequest<{
+    success: boolean;
+    data: { rating: number; numReviews: number };
+  }>(`/api/products/${encodeURIComponent(productId)}/reviews`, {
+    method: "POST",
+    body: review,
+  });
+  return res.data;
 }
 
 export function formatVND(amount: number): string {

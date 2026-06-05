@@ -35,6 +35,16 @@ export function isChatAvailable(): boolean {
   return getUser() !== null;
 }
 
+/**
+ * The signed-in user's id for the current portal, or null if logged out. The
+ * ChatWidget watches this so it can drop one account's threads the moment the
+ * session changes (logout or switching accounts) instead of showing them to the
+ * next user — chat data is private and must never outlive its owner's session.
+ */
+export function currentUserId(): string | null {
+  return getUser()?.userId ?? null;
+}
+
 /** Display name the buyer presents to the shop (name → email local-part → "Customer"). */
 export function currentDisplayName(): string {
   const u = getUser();

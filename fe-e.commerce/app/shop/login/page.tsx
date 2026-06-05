@@ -5,8 +5,11 @@ import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
-import { saveTokens } from "@/lib/auth";
+import { saveTokens, roleFromToken } from "@/lib/auth";
 import OtpInput from "@/components/OtpInput";
+
+const NOT_A_SELLER =
+  "This account isn't a seller account. Sign in at the buyer storefront instead.";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -43,6 +46,12 @@ export default function ShopLoginPage() {
       });
       // Email verification off → login already issued tokens; go straight in.
       if (res.data.twoFactorEnabled === false) {
+        // Only seller accounts may enter the seller hub. The generic login
+        // endpoint authenticates buyers too, so gate on the token's role.
+        if (roleFromToken(res.tokens.accessToken) !== "seller") {
+          setError(NOT_A_SELLER);
+          return;
+        }
         saveTokens(res.tokens.accessToken, res.tokens.refreshToken, "shop");
         window.location.assign("/shop/dashboard");
         return;
@@ -71,6 +80,12 @@ export default function ShopLoginPage() {
         method: "POST",
         body: { userId, otp: code },
       });
+      // Same seller-only gate as the no-2FA path, now that we hold the token.
+      if (roleFromToken(res.tokens.accessToken) !== "seller") {
+        setError(NOT_A_SELLER);
+        setOtp("");
+        return;
+      }
       saveTokens(res.tokens.accessToken, res.tokens.refreshToken, "shop");
       window.location.assign("/shop/dashboard");
     } catch (err: unknown) {

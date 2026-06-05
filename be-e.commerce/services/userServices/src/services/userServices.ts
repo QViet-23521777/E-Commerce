@@ -3,7 +3,7 @@ import argon2 from "argon2";
 import crypto from "crypto";
 import { randomInt, createHash } from "crypto";
 import { JwtService } from "../utils/jwtService";
-import { UserProfile } from "../models/userProfile.Model";
+import { UserProfile, SavedAddress } from "../models/userProfile.Model";
 import { Role } from "../models/role.Model";
 
 export interface RegisterInput {
@@ -67,6 +67,10 @@ export const loginUser = async ({ email, password }: LoginInput) => {
 
   const isPasswordValid = await argon2.verify(user.password, password);
   if (!isPasswordValid) throw new Error("INVALID_CREDENTIALS");
+
+  // A banned account (isActive === false, set by admin ban-user) must not be
+  // able to obtain tokens — block here before any token is minted or OTP set.
+  if (user.isActive === false) throw new Error("ACCOUNT_DISABLED");
 
   const roleName = await resolveRoleName(user.roleId);
   const tokens = JwtService.generateTokenPair({
@@ -211,6 +215,63 @@ export const updateUserProfile = async (
 
 export const deleteUserAccount = async (userId: string) => {
   await User.findByIdAndDelete(userId);
+};
+
+// ── Wishlist ──────────────────────────────────────────────────────────────
+// Stored as the `productId` array on the user's profile (catalogue ids). The
+// profile is upserted so a brand-new account can favourite before its profile
+// row exists.
+
+export const getWishlist = async (userId: string): Promise<string[]> => {
+  const profile = await UserProfile.findOne({ userId });
+  return profile?.productId ?? [];
+};
+
+export const addToWishlist = async (
+  userId: string,
+  productId: string,
+): Promise<string[]> => {
+  const profile = await UserProfile.findOneAndUpdate(
+    { userId },
+    { $addToSet: { productId } },
+    { new: true, upsert: true },
+  );
+  return profile.productId ?? [];
+};
+
+export const removeFromWishlist = async (
+  userId: string,
+  productId: string,
+): Promise<string[]> => {
+  const profile = await UserProfile.findOneAndUpdate(
+    { userId },
+    { $pull: { productId } },
+    { new: true },
+  );
+  return profile?.productId ?? [];
+};
+
+// ── Address book ──────────────────────────────────────────────────────────
+// Whole-array replace (the storefront does add/edit/delete/default locally and
+// saves the resulting list), mirroring the cart service's whole-cart PUT.
+
+export const getAddresses = async (
+  userId: string,
+): Promise<SavedAddress[]> => {
+  const profile = await UserProfile.findOne({ userId });
+  return profile?.addresses ?? [];
+};
+
+export const replaceAddresses = async (
+  userId: string,
+  addresses: SavedAddress[],
+): Promise<SavedAddress[]> => {
+  const profile = await UserProfile.findOneAndUpdate(
+    { userId },
+    { $set: { addresses: Array.isArray(addresses) ? addresses : [] } },
+    { new: true, upsert: true },
+  );
+  return profile.addresses ?? [];
 };
 
 export const setRessetPasswordToken = async (email: string) => {

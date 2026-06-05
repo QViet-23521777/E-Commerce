@@ -40,14 +40,24 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // Shop hub protection
+  // Shop hub protection — must be a seller, not merely any logged-in account.
   if (
     pathname.startsWith("/shop/") &&
     !pathname.startsWith("/shop/login") &&
     !pathname.startsWith("/shop/signup")
   ) {
-    if (!request.cookies.get("shop_token")) {
+    const shopToken = request.cookies.get("shop_token")?.value;
+
+    if (!shopToken) {
       return NextResponse.redirect(new URL("/shop/login", request.url));
+    }
+
+    // Verify the token encodes the seller role. A buyer's token would otherwise
+    // be accepted just for existing, letting non-sellers into the seller hub.
+    if (getJwtRole(shopToken) !== "seller") {
+      const res = NextResponse.redirect(new URL("/shop/login", request.url));
+      res.cookies.delete("shop_token");
+      return res;
     }
   }
 

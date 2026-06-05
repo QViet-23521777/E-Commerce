@@ -13,6 +13,8 @@ import userRoutes from "./routes/user.routes";
 import walletRoutes from "./routes/wallet.route";
 import sellerRoutes from "./routes/seller.route";
 import chatRoutes from "./routes/chat.route";
+import cartRoutes from "./routes/cart.route";
+import supportRoutes from "./routes/support.route";
 import { openapiSpec } from "./openapi";
 import { swaggerHtml } from "./utils/swaggerHtml";
 import adminRoutes from "./routes/admin.route";
@@ -36,6 +38,8 @@ export const createApp = () => {
   app.route("/api/permissions", permissionRoutes);
   app.route("/api/sellers", sellerRoutes);
   app.route("/api/chat", chatRoutes);
+  app.route("/api/cart", cartRoutes);
+  app.route("/api/support", supportRoutes);
 
   app.get("/openapi.json", (c) => c.json(openapiSpec));
   app.get("/docs", (c) =>

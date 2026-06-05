@@ -9,6 +9,7 @@ import {
   type ChatMessage,
   type OpenChatTarget,
   isChatAvailable,
+  currentUserId,
   currentDisplayName,
   listConversations,
   getMessages,
@@ -36,16 +37,40 @@ export default function ChatWidget() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   messagesRef.current = messages;
+  const userIdRef = useRef<string | null>(currentUserId());
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
   const perspective = active?.perspective ?? "buyer";
   const headerName = active?.otherName ?? draft?.shopName ?? "Shop Chat";
   const totalUnread = conversations.reduce((n, c) => n + c.unread, 0);
 
-  // Reflect login state (token lives in localStorage; re-check when opening).
+  // Reflect login state AND drop another account's data the instant the session
+  // changes. Logout navigates client-side (no full reload), so without this the
+  // widget would keep showing the previous user's threads. We watch the active
+  // user id on an interval + on tab focus/storage events (covers same-tab logout
+  // and cross-tab sign-in) and wipe local chat state whenever it changes.
   useEffect(() => {
-    setLoggedIn(isChatAvailable());
-  }, [open]);
+    const sync = () => {
+      const uid = currentUserId();
+      setLoggedIn(uid !== null);
+      if (uid !== userIdRef.current) {
+        userIdRef.current = uid;
+        setConversations([]);
+        setMessages([]);
+        setActiveId(null);
+        setDraft(null);
+      }
+    };
+    sync();
+    const iv = setInterval(sync, 2000);
+    window.addEventListener("focus", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   const refreshConversations = useCallback(async () => {
     if (!isChatAvailable()) return;

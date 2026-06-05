@@ -23,7 +23,9 @@ const promotionRoutes = new Hono();
 
 promotionRoutes.use("*", internalAuth);
 
-promotionRoutes.get("/", extractUser, requireAdmin, listPromotionsController);
+// List is shared: admins see all promotions, sellers see only their own
+// vouchers (scoped in the controller via the authenticated user).
+promotionRoutes.get("/", extractUser, listPromotionsController);
 promotionRoutes.get("/active", listActivePromotionsController);
 promotionRoutes.get("/code/:code", getPromotionByCodeController);
 promotionRoutes.post(
@@ -38,10 +40,12 @@ promotionRoutes.post(
   validatePromotionCheck,
   redeemPromotionController,
 );
+// Create / update / delete are shared by admins (global promotions) and
+// sellers (shop vouchers). The controller scopes non-admins to their own
+// promotions, so no admin gate here.
 promotionRoutes.post(
   "/",
   extractUser,
-  requireAdmin,
   validateCreatePromotion,
   createPromotionController,
 );
@@ -54,14 +58,12 @@ promotionRoutes.get(
 promotionRoutes.patch(
   "/:promotionId",
   extractUser,
-  requireAdmin,
   validateUpdatePromotion,
   updatePromotionController,
 );
 promotionRoutes.delete(
   "/:promotionId",
   extractUser,
-  requireAdmin,
   deletePromotionController,
 );
 

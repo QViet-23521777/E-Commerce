@@ -65,6 +65,24 @@ export const validateCreateMomoPayment = async (c: Context, next: Next) => {
   await next();
 };
 
+export const validateRedeemPoints = async (c: Context, next: Next) => {
+  const body = await c.req.json().catch(() => ({}));
+  const errors: string[] = [];
+
+  if (body.points === undefined) {
+    errors.push("points is required");
+  } else if (!Number.isInteger(body.points) || Number(body.points) <= 0) {
+    errors.push("points must be a positive integer");
+  }
+
+  if (errors.length > 0) {
+    return c.json({ success: false, errors }, 400);
+  }
+
+  c.set("validatedBody", body);
+  await next();
+};
+
 export const validateCreditWallet = async (c: Context, next: Next) => {
   const body = await c.req.json().catch(() => ({}));
   const errors: string[] = [];

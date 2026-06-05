@@ -26,9 +26,18 @@ import {
   type UIProduct,
 } from "@/lib/products";
 import { fetchSellerPublicProfile, type PublicShop } from "@/lib/seller";
+import { fetchAlsoBought } from "@/lib/recommendations";
+import { trackActivity } from "@/lib/activity";
+import { reportReview } from "@/lib/reviews";
+import ProductRail from "@/components/ProductRail";
 import { addToCart } from "@/lib/cart";
 import { openChatWith } from "@/lib/chat";
 import { isLoggedIn } from "@/lib/auth";
+import {
+  fetchWishlist,
+  addToWishlist,
+  removeFromWishlist,
+} from "@/lib/wishlist";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -42,6 +51,7 @@ export default function ProductDetailPage({
 
   const [product, setProduct] = useState<UIProduct | null>(null);
   const [related, setRelated] = useState<UIProduct[]>([]);
+  const [alsoBought, setAlsoBought] = useState<UIProduct[]>([]);
   const [stock, setStock] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -52,6 +62,25 @@ export default function ProductDetailPage({
   const [activeTab, setActiveTab] = useState("specs");
   const [shop, setShop] = useState<PublicShop | null>(null);
   const [shopStats, setShopStats] = useState<ShopOfProduct | null>(null);
+  const [reportedIdx, setReportedIdx] = useState<Set<number>>(new Set());
+
+  const handleReportReview = async (index: number | undefined) => {
+    if (index === undefined) return;
+    if (!isLoggedIn()) {
+      router.push("/login");
+      return;
+    }
+    setReportedIdx((prev) => new Set(prev).add(index)); // optimistic
+    try {
+      await reportReview(id, index);
+    } catch {
+      setReportedIdx((prev) => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -67,6 +96,15 @@ export default function ProductDetailPage({
       }
       setProduct(p);
       setLoading(false);
+
+      // Record the view so "Recently Viewed" / "Recommended for You" populate
+      // (no-op for guests; fire-and-forget).
+      trackActivity("view", { productId: p.id });
+
+      // Co-purchase recommendations (excludes the current product server-side).
+      fetchAlsoBought(p.id, 8).then((items) => {
+        if (!cancelled) setAlsoBought(items.filter((r) => r.id !== p.id));
+      });
 
       fetchShopByProduct(p.id).then(async (stats) => {
         if (cancelled || !stats) return;
@@ -92,6 +130,36 @@ export default function ProductDetailPage({
       cancelled = true;
     };
   }, [id]);
+
+  // Reflect whether this product is already in the user's wishlist (logged-in
+  // only — anonymous visitors just see an empty heart until they sign in).
+  useEffect(() => {
+    if (!isLoggedIn()) return;
+    let cancelled = false;
+    fetchWishlist()
+      .then((ids) => {
+        if (!cancelled) setWishlisted(ids.includes(id));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const toggleWishlist = async () => {
+    if (!isLoggedIn()) {
+      router.push("/login");
+      return;
+    }
+    const next = !wishlisted;
+    setWishlisted(next); // optimistic
+    try {
+      if (next) await addToWishlist(id);
+      else await removeFromWishlist(id);
+    } catch {
+      setWishlisted(!next); // revert on failure
+    }
+  };
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -314,7 +382,7 @@ export default function ProductDetailPage({
                   </AnimatePresence>
                 </button>
                 <button
-                  onClick={() => setWishlisted((v) => !v)}
+                  onClick={toggleWishlist}
                   className={`w-14 h-14 flex items-center justify-center border-2 rounded-xl transition-colors duration-150 active:scale-[0.97] ${
                     wishlisted ? "bg-deep-navy border-deep-navy text-primary-container" : "border-deep-navy hover:bg-surface-container"
                   }`}
@@ -432,10 +500,33 @@ export default function ProductDetailPage({
                           {rv.text && (
                             <p className="text-sm text-on-surface-variant leading-relaxed">{rv.text}</p>
                           )}
-                          {rv.date && (
-                            <p className="text-[11px] uppercase tracking-widest text-outline">
-                              {new Date(rv.date).toLocaleDateString()}
-                            </p>
+                          <div className="flex items-center justify-between gap-3">
+                            {rv.date ? (
+                              <p className="text-[11px] uppercase tracking-widest text-outline">
+                                {new Date(rv.date).toLocaleDateString()}
+                              </p>
+                            ) : (
+                              <span />
+                            )}
+                            {rv.index !== undefined &&
+                              (reportedIdx.has(rv.index) ? (
+                                <span className="text-[11px] text-on-surface-variant">Reported ✓</span>
+                              ) : (
+                                <button
+                                  onClick={() => handleReportReview(rv.index)}
+                                  className="text-[11px] font-semibold text-outline hover:text-error transition-colors"
+                                >
+                                  Report
+                                </button>
+                              ))}
+                          </div>
+                          {rv.reply && (
+                            <div className="mt-2 ml-3 pl-3 border-l-2 border-primary-container space-y-1">
+                              <p className="text-[11px] font-bold uppercase tracking-widest text-primary">
+                                {rv.reply.author || "Shop"} replied
+                              </p>
+                              <p className="text-sm text-on-surface-variant leading-relaxed">{rv.reply.body}</p>
+                            </div>
                           )}
                         </div>
                       ))}
@@ -517,6 +608,16 @@ export default function ProductDetailPage({
                   </motion.div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {alsoBought.length > 0 && (
+            <div className="mt-16 -mx-10">
+              <ProductRail
+                title="Customers Also Bought"
+                subtitle="Frequently bought together"
+                products={alsoBought}
+              />
             </div>
           )}
         </div>

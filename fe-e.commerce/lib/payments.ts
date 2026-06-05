@@ -67,9 +67,11 @@ export interface CheckoutItemInput {
 }
 
 export interface CheckoutInput {
-  // Integer VND. Optional: when `items` are provided the backend recomputes the
-  // amount from inventory prices (and rejects a mismatching `amount`), so callers
-  // should omit it in that case and send it only for amount-only checkouts.
+  // Integer VND — the amount actually charged (subtotal − discount + shipping).
+  // Send it on every checkout; the backend charges this value. When `items` are
+  // also provided they're recorded for seller attribution + stock deduction
+  // (the item subtotal may differ from `amount` because shipping/discount live
+  // in the storefront, not in inventory).
   amount?: number;
   orderInfo?: string;
   items?: CheckoutItemInput[];
@@ -98,6 +100,34 @@ export async function createMomoPayment(input: CheckoutInput): Promise<Payment> 
     { method: "POST", body: input },
   );
   return res.data;
+}
+
+/**
+ * A mock MoMo payUrl points at the sandbox (`…/mock?orderId=…`) and never calls
+ * our IPN back, so a mock order would otherwise sit `pending` forever. This
+ * stands in for the MoMo callback: it posts a synthetic success IPN (the backend
+ * skips signature verification in mock mode) which deducts stock and flips the
+ * order to `paid` / `to_confirm`, exactly like the real gateway would.
+ */
+export function isMockMomoPayUrl(payUrl?: string | null): boolean {
+  return !!payUrl && /\/mock(\?|$)/.test(payUrl);
+}
+
+export async function confirmMockMomoPayment(payment: Payment): Promise<void> {
+  await apiRequest("/api/payments/momo/ipn", {
+    method: "POST",
+    body: {
+      orderId: payment.orderId,
+      requestId: payment.requestId,
+      amount: payment.amount,
+      partnerCode: payment.partnerCode,
+      orderInfo: payment.orderInfo,
+      resultCode: 0,
+      message: "Successful (mock).",
+      responseTime: Date.now(),
+      transId: Date.now(),
+    },
+  });
 }
 
 /** Fetch the live status of a payment by its orderId. */

@@ -12,6 +12,11 @@ import {
   changePassword,
   verifyingResetPassword,
   secondFactorAuth,
+  getWishlistController,
+  addWishlistController,
+  removeWishlistController,
+  getAddressesController,
+  replaceAddressesController,
 } from "../controllers/user.controller";
 import { Hono } from "hono";
 import { validateRegister, validateLogin } from "../middleware/validateRequest";
@@ -34,11 +39,21 @@ userRoutes.post("/second-factor-auth", secondFactorAuth);
 userRoutes.use("/logout", extractUser);
 userRoutes.use("/profile", extractUser);
 userRoutes.use("/profile/*", extractUser);
+userRoutes.use("/wishlist", extractUser);
+userRoutes.use("/wishlist/*", extractUser);
+userRoutes.use("/addresses", extractUser);
 
 userRoutes.post("/logout", logout);
 userRoutes.get("/profile", profile);
 userRoutes.get("/profile/:id", getProfileById);
 userRoutes.put("/profile", updateProfile);
 userRoutes.delete("/profile", deleteAccount);
+
+userRoutes.get("/wishlist", getWishlistController);
+userRoutes.post("/wishlist", addWishlistController);
+userRoutes.delete("/wishlist/:productId", removeWishlistController);
+
+userRoutes.get("/addresses", getAddressesController);
+userRoutes.put("/addresses", replaceAddressesController);
 
 export default userRoutes;

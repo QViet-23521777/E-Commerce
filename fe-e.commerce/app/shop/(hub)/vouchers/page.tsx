@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Plus,
@@ -15,6 +15,14 @@ import {
   ShoppingBag,
   RotateCcw,
 } from "lucide-react";
+import {
+  fetchMyVouchers,
+  createVoucher,
+  updateVoucher,
+  deleteVoucher,
+  type Promotion,
+  type VoucherInput,
+} from "@/lib/promotions";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -35,73 +43,66 @@ interface Voucher {
   status: VoucherStatus;
 }
 
-const INITIAL_VOUCHERS: Voucher[] = [
-  {
-    id: "v1",
-    code: "NORDIC20",
-    type: "percent",
-    value: 20,
-    minOrder: 100,
-    appliesTo: "all",
-    validFrom: "2024-11-01",
-    validUntil: "2024-12-31",
-    usageLimit: 50,
-    usedCount: 12,
-    status: "active",
-  },
-  {
-    id: "v2",
-    code: "WELCOME10",
-    type: "percent",
-    value: 10,
-    minOrder: 0,
-    appliesTo: "all",
-    validFrom: "2024-10-01",
-    validUntil: "2024-11-30",
-    usageLimit: null,
-    usedCount: 38,
-    status: "active",
-  },
-  {
-    id: "v3",
-    code: "LAMP50",
-    type: "fixed",
-    value: 50,
-    minOrder: 200,
-    appliesTo: ["Task Lamp T-1", "Nordic Wall Clock"],
-    validFrom: "2024-11-05",
-    validUntil: "2024-12-15",
-    usageLimit: 10,
-    usedCount: 3,
-    status: "active",
-  },
-  {
-    id: "v4",
-    code: "NEWUSER25",
-    type: "percent",
-    value: 25,
-    minOrder: 0,
-    appliesTo: "all",
-    validFrom: "2024-12-01",
-    validUntil: "2025-01-31",
-    usageLimit: 100,
-    usedCount: 0,
-    status: "scheduled",
-  },
-  {
-    id: "v5",
-    code: "SUMMER15",
-    type: "percent",
-    value: 15,
-    minOrder: 50,
-    appliesTo: "all",
-    validFrom: "2024-06-01",
-    validUntil: "2024-08-31",
-    usageLimit: null,
-    usedCount: 87,
-    status: "expired",
-  },
-];
+// A voucher with no explicit end date is stored with this far-future date
+// (the promotion service requires endDate). We render it as "∞".
+const OPEN_ENDED = "2099-12-31";
+
+function computeStatus(
+  active: boolean,
+  validFrom: string,
+  validUntil: string,
+): VoucherStatus {
+  const now = new Date().toISOString().slice(0, 10);
+  if (!active) return "expired";
+  if (validUntil && validUntil !== OPEN_ENDED && validUntil < now) return "expired";
+  if (validFrom > now) return "scheduled";
+  return "active";
+}
+
+// Backend promotion → the UI's Voucher shape.
+function toVoucher(p: Promotion): Voucher {
+  const validFrom = (p.startDate ?? "").slice(0, 10);
+  const rawUntil = (p.endDate ?? "").slice(0, 10);
+  const validUntil = rawUntil === OPEN_ENDED ? "" : rawUntil;
+  return {
+    id: p.id,
+    code: p.code,
+    type: p.discountType === "percentage" ? "percent" : "fixed",
+    value: p.discountValue,
+    minOrder: p.minOrderAmount ?? 0,
+    appliesTo: p.productIds && p.productIds.length ? p.productIds : "all",
+    validFrom,
+    validUntil,
+    usageLimit: p.usageLimit ?? null,
+    usedCount: p.usedCount ?? 0,
+    status: computeStatus(p.active, validFrom, rawUntil),
+  };
+}
+
+// UI drawer form → the backend create/update payload.
+function toVoucherInput(d: DrawerVoucher): VoucherInput {
+  const code = d.code.trim().toUpperCase();
+  const productIds =
+    d.appliesTo.trim().toLowerCase() === "all" || d.appliesTo.trim() === ""
+      ? []
+      : d.appliesTo
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+  return {
+    code,
+    title: code, // the form has no separate title; the code doubles as it.
+    discountType: d.type === "percent" ? "percentage" : "fixed",
+    discountValue: parseFloat(d.value) || 0,
+    minOrderAmount: parseFloat(d.minOrder) || 0,
+    startDate: new Date(`${d.validFrom}T00:00:00`).toISOString(),
+    endDate: new Date(
+      `${d.validUntil || OPEN_ENDED}T23:59:59`,
+    ).toISOString(),
+    usageLimit: d.usageLimit ? parseInt(d.usageLimit) : null,
+    productIds,
+  };
+}
 
 type TabId = "active" | "scheduled" | "expired";
 const TABS: { id: TabId; label: string }[] = [
@@ -139,13 +140,35 @@ function generateCode() {
 }
 
 export default function VouchersPage() {
-  const [vouchers, setVouchers] = useState<Voucher[]>(INITIAL_VOUCHERS);
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("active");
   const [showDrawer, setShowDrawer] = useState(false);
   const [drawerVoucher, setDrawerVoucher] = useState<DrawerVoucher>(EMPTY_DRAWER);
   const [drawerSaved, setDrawerSaved] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function loadVouchers() {
+    setLoadError(null);
+    try {
+      const promos = await fetchMyVouchers();
+      setVouchers(promos.map(toVoucher));
+    } catch (err) {
+      const e = err as { message?: string };
+      setLoadError(e?.message ?? "Couldn't load vouchers.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadVouchers();
+  }, []);
 
   function copyCode(id: string, code: string) {
     navigator.clipboard.writeText(code).catch(() => {});
@@ -156,6 +179,7 @@ export default function VouchersPage() {
   function openCreate() {
     setDrawerVoucher(EMPTY_DRAWER);
     setDrawerSaved(false);
+    setDrawerError(null);
     setShowDrawer(true);
   }
 
@@ -172,45 +196,55 @@ export default function VouchersPage() {
       usageLimit: v.usageLimit ? String(v.usageLimit) : "",
     });
     setDrawerSaved(false);
+    setDrawerError(null);
     setShowDrawer(true);
   }
 
-  function handleSave() {
-    if (!drawerVoucher.code || !drawerVoucher.value) return;
-
-    const now = new Date().toISOString().slice(0, 10);
-    const from = drawerVoucher.validFrom;
-    const until = drawerVoucher.validUntil;
-    const status: VoucherStatus =
-      until && until < now ? "expired" : from > now ? "scheduled" : "active";
-
-    const base: Voucher = {
-      id: drawerVoucher.id ?? `v${Date.now()}`,
-      code: drawerVoucher.code.toUpperCase(),
-      type: drawerVoucher.type,
-      value: parseFloat(drawerVoucher.value) || 0,
-      minOrder: parseFloat(drawerVoucher.minOrder) || 0,
-      appliesTo:
-        drawerVoucher.appliesTo.trim().toLowerCase() === "all"
-          ? "all"
-          : drawerVoucher.appliesTo.split(",").map((s) => s.trim()),
-      validFrom: from,
-      validUntil: until,
-      usageLimit: drawerVoucher.usageLimit ? parseInt(drawerVoucher.usageLimit) : null,
-      usedCount: 0,
-      status,
-    };
-
-    if (drawerVoucher.id) {
-      setVouchers((prev) =>
-        prev.map((v) => (v.id === drawerVoucher.id ? { ...v, ...base, usedCount: v.usedCount } : v))
-      );
-    } else {
-      setVouchers((prev) => [base, ...prev]);
+  async function handleSave() {
+    if (!drawerVoucher.code || !drawerVoucher.value) {
+      setDrawerError("Code and value are required.");
+      return;
     }
+    if (!drawerVoucher.validFrom) {
+      setDrawerError("A start date is required.");
+      return;
+    }
+    setDrawerError(null);
+    setSaving(true);
+    try {
+      const payload = toVoucherInput(drawerVoucher);
+      if (drawerVoucher.id) {
+        await updateVoucher(drawerVoucher.id, payload);
+      } else {
+        await createVoucher(payload);
+      }
+      await loadVouchers();
+      setDrawerSaved(true);
+      setTimeout(() => setShowDrawer(false), 700);
+    } catch (err) {
+      const e = err as { status?: number; message?: string; errors?: string[] };
+      setDrawerError(
+        e?.status === 409
+          ? "That code is already in use."
+          : e?.errors?.[0] ?? e?.message ?? "Couldn't save the voucher.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
-    setDrawerSaved(true);
-    setTimeout(() => setShowDrawer(false), 800);
+  async function handleDelete() {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      await deleteVoucher(deleteId);
+      setVouchers((prev) => prev.filter((v) => v.id !== deleteId));
+      setDeleteId(null);
+    } catch {
+      /* keep the dialog open on failure */
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const filtered = vouchers.filter((v) => v.status === activeTab);
@@ -271,7 +305,23 @@ export default function VouchersPage() {
         </div>
 
         {/* Voucher list */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="bg-white border-2 border-deep-navy rounded-xl py-16 flex flex-col items-center text-center">
+            <Ticket className="w-10 h-10 text-outline mb-3 animate-pulse" />
+            <p className="text-sm text-on-surface-variant">Loading vouchers…</p>
+          </div>
+        ) : loadError ? (
+          <div className="bg-white border-2 border-error/40 rounded-xl py-16 flex flex-col items-center text-center">
+            <Ticket className="w-10 h-10 text-error/60 mb-3" />
+            <p className="font-semibold text-error">{loadError}</p>
+            <button
+              onClick={() => { setLoading(true); loadVouchers(); }}
+              className="mt-3 text-sm font-semibold text-primary hover:underline"
+            >
+              Try again
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="bg-white border-2 border-deep-navy rounded-xl py-16 flex flex-col items-center text-center">
             <Ticket className="w-10 h-10 text-outline mb-3" />
             <p className="font-semibold text-on-surface">No {activeTab} vouchers</p>
@@ -475,13 +525,11 @@ export default function VouchersPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    setVouchers((prev) => prev.filter((v) => v.id !== deleteId));
-                    setDeleteId(null);
-                  }}
-                  className="flex-1 h-10 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 active:scale-[0.97] transition-all"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 h-10 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 active:scale-[0.97] transition-all disabled:opacity-60"
                 >
-                  Delete
+                  {deleting ? "Deleting…" : "Delete"}
                 </button>
               </div>
             </motion.div>
@@ -693,48 +741,58 @@ export default function VouchersPage() {
               </div>
 
               {/* Footer */}
-              <div className="border-t-2 border-deep-navy px-6 py-4 flex gap-3 shrink-0 bg-white">
-                <button
-                  onClick={() => setShowDrawer(false)}
-                  className="flex-1 h-11 border-2 border-deep-navy/20 rounded-xl text-sm font-semibold text-on-surface-variant hover:border-deep-navy transition-colors"
-                >
-                  Cancel
-                </button>
-                <motion.button
-                  onClick={handleSave}
-                  animate={
-                    drawerSaved
-                      ? { backgroundColor: "#001a41" }
-                      : { backgroundColor: "#00f3ff" }
-                  }
-                  transition={{ duration: 0.25, ease: EASE }}
-                  className="flex-1 h-11 rounded-xl text-sm font-bold border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all"
-                >
-                  <AnimatePresence mode="wait">
-                    {drawerSaved ? (
-                      <motion.span
-                        key="saved"
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="flex items-center justify-center gap-2 text-primary-container"
-                      >
-                        <Check className="w-4 h-4" />
-                        {drawerVoucher.id ? "Saved!" : "Created!"}
-                      </motion.span>
-                    ) : (
-                      <motion.span
-                        key="save"
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="text-deep-navy"
-                      >
-                        {drawerVoucher.id ? "Save Changes" : "Create Voucher"}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </motion.button>
+              <div className="border-t-2 border-deep-navy px-6 py-4 shrink-0 bg-white">
+                {drawerError && (
+                  <p className="text-xs font-medium text-error mb-3">{drawerError}</p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowDrawer(false)}
+                    className="flex-1 h-11 border-2 border-deep-navy/20 rounded-xl text-sm font-semibold text-on-surface-variant hover:border-deep-navy transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <motion.button
+                    onClick={handleSave}
+                    disabled={saving}
+                    animate={
+                      drawerSaved
+                        ? { backgroundColor: "#001a41" }
+                        : { backgroundColor: "#00f3ff" }
+                    }
+                    transition={{ duration: 0.25, ease: EASE }}
+                    className="flex-1 h-11 rounded-xl text-sm font-bold border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all disabled:opacity-70"
+                  >
+                    <AnimatePresence mode="wait">
+                      {drawerSaved ? (
+                        <motion.span
+                          key="saved"
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="flex items-center justify-center gap-2 text-primary-container"
+                        >
+                          <Check className="w-4 h-4" />
+                          {drawerVoucher.id ? "Saved!" : "Created!"}
+                        </motion.span>
+                      ) : (
+                        <motion.span
+                          key="save"
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="text-deep-navy"
+                        >
+                          {saving
+                            ? "Saving…"
+                            : drawerVoucher.id
+                            ? "Save Changes"
+                            : "Create Voucher"}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
+                </div>
               </div>
             </motion.aside>
           </>

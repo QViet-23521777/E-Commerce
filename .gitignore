@@ -128,3 +128,33 @@ log/SEED ACCOUNTS - Shops.md
 log/SESSION 2026-05-30 - Shop Seed, Ratings, Image-URL, Owned Filter.md
 log/SESSION 2026-05-31 - Buyer-Shop Chat + Seed Login Fix.md
 log/SESSION 2026-05-31 - Persistent Header + Logo Redesign.md
+DOCCS/BRD.md
+DOCCS/SRS.md
+log/2026-06-02-real-momo-payment.md
+log/api_smoke.mjs
+log/backfillLoyaltyPoints.mongo.js
+log/FEATURE_IMPLEMENTATION_PLAN_2026-06-03.md
+log/FEATURE_SUGGESTIONS_2026-06-03.md
+log/MANUAL_TEST_PLAN_2026-06-03_RECS_SEARCH_REVIEWS_CART.md
+log/MANUAL_TEST_PLAN_2026-06-03.md
+log/MANUAL_TEST_PLAN.md
+log/SESSION_2026-06-02_CART_SERVICE.md
+log/SESSION_2026-06-02_DEMOCK_SUPPORT_SERVICE.md
+log/SESSION_2026-06-02_FIXES.md
+log/SESSION_2026-06-02_MANUAL_TEST_PLAN_RUN.md
+log/SESSION_2026-06-03_LOYALTY_POINTS.md
+log/SESSION_2026-06-03_PROFILE_DEMOCK.md
+log/SESSION_2026-06-03_RECS_SEARCH_REVIEWS_CART_QA.md
+log/SESSION_2026-06-03_RECS_SEARCH_REVIEWS_CART.md
+log/SESSION_2026-06-04_SELLER_ORDER_VISIBILITY_FIX.md
+log/SESSION_2026-06-04_SHOP_PORTAL_ROLE_GATE.md
+log/smoke_loyalty_points.mjs
+log/smoke_profile_demock.mjs
+log/smoke_recs_search_reviews_cart.mjs
+log/TEST_PLAN_FULL_2026-06-04.md
+log/TONG HOP THAY DOI BACKEND.md
+log/UIUX_SCREENSHOT_SECTIONS.md
+log/UIUX_SODO_LIENKET.md
+log/verify_accounts.mjs
+log/verify_categories.mjs
+log/WEBSITE_DEMO_PLAN.md

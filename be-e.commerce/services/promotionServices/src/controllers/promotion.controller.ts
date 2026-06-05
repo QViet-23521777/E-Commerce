@@ -17,10 +17,23 @@ const getErrorStatus = (message: string) => {
   return 400;
 };
 
+// The promotion routes are shared by admins (global promotions) and sellers
+// (shop vouchers). A non-admin caller is treated as a seller and is scoped to
+// promotions they own. Returns the sellerId to scope by, or undefined for admin.
+const getSellerScope = (c: Context): string | undefined => {
+  const user = c.get("user") as { id?: string; role?: string } | undefined;
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  return isAdmin ? undefined : user?.id;
+};
+
 export const createPromotionController = async (c: Context) => {
   try {
     const body = c.get("validatedBody");
-    const promotion = await createPromotion(body);
+    const sellerId = getSellerScope(c);
+    // Sellers own their vouchers; admins create global (sellerId = null).
+    const promotion = await createPromotion(
+      sellerId === undefined ? { ...body, sellerId: null } : { ...body, sellerId },
+    );
     return c.json({ success: true, data: promotion }, 201);
   } catch (error) {
     const message =
@@ -36,7 +49,8 @@ export const listPromotionsController = async (c: Context) => {
       activeQuery === undefined ? undefined : activeQuery.toLowerCase() === "true";
     const limit = Number(c.req.query("limit")) || 20;
     const page = Number(c.req.query("page")) || 1;
-    const result = await listPromotions({ active, limit, page });
+    const sellerId = getSellerScope(c);
+    const result = await listPromotions({ active, limit, page, sellerId });
     return c.json({ success: true, ...result });
   } catch (error) {
     const message =
@@ -84,7 +98,7 @@ export const updatePromotionController = async (c: Context) => {
   try {
     const promotionId = c.req.param("promotionId") || "";
     const body = c.get("validatedBody");
-    const promotion = await updatePromotion(promotionId, body);
+    const promotion = await updatePromotion(promotionId, body, getSellerScope(c));
     return c.json({ success: true, data: promotion });
   } catch (error) {
     const message =
@@ -96,7 +110,7 @@ export const updatePromotionController = async (c: Context) => {
 export const deletePromotionController = async (c: Context) => {
   try {
     const promotionId = c.req.param("promotionId") || "";
-    const promotion = await deletePromotion(promotionId);
+    const promotion = await deletePromotion(promotionId, getSellerScope(c));
     return c.json({ success: true, data: promotion });
   } catch (error) {
     const message =

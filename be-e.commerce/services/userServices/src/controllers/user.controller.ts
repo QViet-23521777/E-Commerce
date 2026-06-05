@@ -16,6 +16,11 @@ import {
   getUserByToken,
   getUserByEmail,
   SecondFactorAuth,
+  getWishlist,
+  addToWishlist,
+  removeFromWishlist,
+  getAddresses,
+  replaceAddresses,
 } from "../services/userServices";
 import { JwtService } from "../utils/jwtService";
 import { mailClient } from "../utils/mailClient";
@@ -24,6 +29,7 @@ const HTTP_STATUS: Record<string, number> = {
   EMAIL_EXISTS: 400,
   INVALID_CREDENTIALS: 401,
   EMAIL_NOT_VERIFIED: 401,
+  ACCOUNT_DISABLED: 403,
   USER_NOT_FOUND: 404,
   INVALID_TOKEN: 401,
   TOKEN_EXPIRED: 400,
@@ -283,6 +289,75 @@ export const deleteAccount = async (c: Context) => {
       { success: true, message: "Account deleted successfully" },
       200,
     );
+  } catch (error) {
+    return handleError(c, error);
+  }
+};
+
+// ── Wishlist ────────────────────────────────────────────────────────────────
+
+export const getWishlistController = async (c: Context) => {
+  try {
+    const user = c.get("user") as any;
+    if (!user)
+      return c.json({ success: false, message: "User not authenticated" }, 401);
+    const data = await getWishlist(user.id);
+    return c.json({ success: true, data }, 200);
+  } catch (error) {
+    return handleError(c, error);
+  }
+};
+
+export const addWishlistController = async (c: Context) => {
+  try {
+    const user = c.get("user") as any;
+    if (!user)
+      return c.json({ success: false, message: "User not authenticated" }, 401);
+    const { productId } = await c.req.json();
+    if (!productId || String(productId).trim() === "")
+      return c.json({ success: false, message: "productId is required" }, 400);
+    const data = await addToWishlist(user.id, String(productId));
+    return c.json({ success: true, data }, 200);
+  } catch (error) {
+    return handleError(c, error);
+  }
+};
+
+export const removeWishlistController = async (c: Context) => {
+  try {
+    const user = c.get("user") as any;
+    if (!user)
+      return c.json({ success: false, message: "User not authenticated" }, 401);
+    const { productId } = c.req.param();
+    const data = await removeFromWishlist(user.id, String(productId));
+    return c.json({ success: true, data }, 200);
+  } catch (error) {
+    return handleError(c, error);
+  }
+};
+
+// ── Address book ──────────────────────────────────────────────────────────────
+
+export const getAddressesController = async (c: Context) => {
+  try {
+    const user = c.get("user") as any;
+    if (!user)
+      return c.json({ success: false, message: "User not authenticated" }, 401);
+    const data = await getAddresses(user.id);
+    return c.json({ success: true, data }, 200);
+  } catch (error) {
+    return handleError(c, error);
+  }
+};
+
+export const replaceAddressesController = async (c: Context) => {
+  try {
+    const user = c.get("user") as any;
+    if (!user)
+      return c.json({ success: false, message: "User not authenticated" }, 401);
+    const { addresses } = await c.req.json();
+    const data = await replaceAddresses(user.id, addresses);
+    return c.json({ success: true, data }, 200);
   } catch (error) {
     return handleError(c, error);
   }

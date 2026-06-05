@@ -15,8 +15,14 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { formatVND } from "@/lib/products";
-import { getOrderSnapshot, type OrderSnapshot } from "@/lib/cart";
-import { getPaymentStatus, type Payment, type PaymentStatus } from "@/lib/payments";
+import { getOrderSnapshot, fetchOrderSnapshot, type OrderSnapshot } from "@/lib/cart";
+import {
+  getPaymentStatus,
+  confirmMockMomoPayment,
+  isMockMomoPayUrl,
+  type Payment,
+  type PaymentStatus,
+} from "@/lib/payments";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -55,14 +61,34 @@ function ConfirmationContent() {
   const [payment, setPayment] = useState<Payment | null>(null);
   const [snapshot, setSnapshot] = useState<OrderSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const mockMomo = isMockMomoPayUrl(payUrl);
+
+  async function handleMockConfirm() {
+    if (!payment || confirming) return;
+    setConfirming(true);
+    try {
+      await confirmMockMomoPayment(payment);
+      const updated = await getPaymentStatus(payment.orderId);
+      if (updated) setPayment(updated);
+    } catch {
+      /* leave it pending; the poll will keep checking */
+    } finally {
+      setConfirming(false);
+    }
+  }
 
   useEffect(() => {
     if (!orderId) {
       setLoading(false);
       return;
     }
-    setSnapshot(getOrderSnapshot(orderId));
+    // Local-first; fall back to the server copy (e.g. on another device).
+    const local = getOrderSnapshot(orderId);
+    if (local) setSnapshot(local);
+    else fetchOrderSnapshot(orderId).then((s) => { if (s) setSnapshot(s); });
 
     let active = true;
     const load = async () => {
@@ -176,8 +202,28 @@ function ConfirmationContent() {
           </p>
         </motion.div>
 
-        {/* Pending MoMo CTA */}
-        {payment.status === "pending" && payUrl && (
+        {/* Pending MoMo CTA. In mock mode the sandbox payUrl never calls our
+            IPN back, so the button confirms the order in-place instead. */}
+        {payment.status === "pending" && payUrl && mockMomo && (
+          <motion.button
+            type="button"
+            onClick={handleMockConfirm}
+            disabled={confirming}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: EASE, delay: 0.3 }}
+            className="flex items-center justify-center gap-2 h-12 mb-6 w-full text-white text-label-caps font-bold rounded-xl disabled:opacity-60"
+            style={{ backgroundColor: "#a50064" }}
+          >
+            {confirming ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Smartphone className="w-4 h-4" />
+            )}
+            {confirming ? "Confirming…" : "Complete payment on MoMo (sandbox)"}
+          </motion.button>
+        )}
+        {payment.status === "pending" && payUrl && !mockMomo && (
           <motion.a
             href={payUrl}
             target="_blank"

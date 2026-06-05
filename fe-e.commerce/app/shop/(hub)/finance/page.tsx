@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   TrendingUp,
@@ -11,76 +11,118 @@ import {
   Plus,
   X,
   Check,
-  Download,
   Building2,
   Clock,
   ShieldCheck,
 } from "lucide-react";
+import { fetchSellerOrders, type Order } from "@/lib/orders";
+import { fetchWallet, withdrawWallet, type Wallet as WalletT } from "@/lib/wallet";
+import { fetchSellerBank, saveSellerBank, type SellerBank } from "@/lib/support";
+import {
+  monthlyRevenue,
+  revenueSummary,
+  ordersToTransactions,
+  shortDate,
+} from "@/lib/analytics";
+import { formatVND } from "@/lib/products";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-const MONTHLY_REVENUE = [
-  { month: "Jun", value: 6800 },
-  { month: "Jul", value: 8200 },
-  { month: "Aug", value: 7400 },
-  { month: "Sep", value: 9100 },
-  { month: "Oct", value: 11200 },
-  { month: "Nov", value: 12480 },
-];
-const MAX_REV = Math.max(...MONTHLY_REVENUE.map((r) => r.value));
-
-interface Transaction {
-  id: string;
-  type: "payout" | "withdrawal" | "fee" | "refund";
-  label: string;
-  amount: number;
-  date: string;
-  status: "completed" | "pending" | "failed";
-}
-
-const TRANSACTIONS: Transaction[] = [
-  { id: "t1", type: "payout", label: "Order payout · #ORD-5816", amount: 157.5, date: "Nov 12, 2024", status: "completed" },
-  { id: "t2", type: "payout", label: "Order payout · #ORD-5815", amount: 468, date: "Nov 11, 2024", status: "completed" },
-  { id: "t3", type: "withdrawal", label: "Withdrawal to bank ···· 4291", amount: -500, date: "Nov 10, 2024", status: "completed" },
-  { id: "t4", type: "refund", label: "Refund issued · #ORD-5814", amount: -264, date: "Nov 10, 2024", status: "completed" },
-  { id: "t5", type: "fee", label: "Platform fee · Nov 2024", amount: -29, date: "Nov 1, 2024", status: "completed" },
-  { id: "t6", type: "payout", label: "Order payout · #ORD-5813", amount: 212, date: "Oct 30, 2024", status: "completed" },
-  { id: "t7", type: "payout", label: "Order payout · #ORD-5812", amount: 392, date: "Oct 28, 2024", status: "pending" },
-  { id: "t8", type: "withdrawal", label: "Withdrawal to bank ···· 4291", amount: -400, date: "Oct 20, 2024", status: "completed" },
-];
-
-const TYPE_META: Record<Transaction["type"], { color: string; label: string }> = {
+const TYPE_META: Record<string, { color: string; label: string }> = {
   payout: { color: "text-green-600", label: "Payout" },
-  withdrawal: { color: "text-deep-navy", label: "Withdrawal" },
-  fee: { color: "text-on-surface-variant", label: "Fee" },
   refund: { color: "text-red-600", label: "Refund" },
 };
 
 export default function FinancePage() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [wallet, setWallet] = useState<WalletT | null>(null);
+  const [bank, setBank] = useState<SellerBank | null>(null);
+  const [loading, setLoading] = useState(true);
+
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawDone, setWithdrawDone] = useState(false);
-  const [bankName, setBankName] = useState("DNB Bank");
-  const [accountNo, setAccountNo] = useState("1234 56 78901");
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const [bankName, setBankName] = useState("");
+  const [accountNo, setAccountNo] = useState("");
   const [bankSaved, setBankSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  function handleWithdraw() {
-    setWithdrawDone(true);
-    setTimeout(() => {
-      setShowWithdrawModal(false);
-      setWithdrawDone(false);
-      setWithdrawAmount("");
-    }, 1200);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [o, w, b] = await Promise.all([
+          fetchSellerOrders(),
+          fetchWallet().catch(() => null),
+          fetchSellerBank().catch(() => null),
+        ]);
+        setOrders(o);
+        setWallet(w);
+        setBank(b);
+        setBankName(b?.bankName ?? "");
+        setAccountNo(b?.accountNo ?? "");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const revenue = useMemo(() => monthlyRevenue(orders), [orders]);
+  const summary = useMemo(() => revenueSummary(orders), [orders]);
+  const transactions = useMemo(() => ordersToTransactions(orders), [orders]);
+  const maxRev = Math.max(1, ...revenue.map((r) => r.value));
+  const balance = wallet?.balance ?? 0;
+
+  async function handleWithdraw() {
+    const amount = Math.floor(Number(withdrawAmount));
+    if (!amount || amount <= 0) return;
+    setBusy(true);
+    setWithdrawError(null);
+    try {
+      const w = await withdrawWallet(amount);
+      setWallet(w);
+      setWithdrawDone(true);
+      setTimeout(() => {
+        setShowWithdrawModal(false);
+        setWithdrawDone(false);
+        setWithdrawAmount("");
+      }, 1200);
+    } catch (e) {
+      const status = (e as { status?: number })?.status;
+      setWithdrawError(status === 402 ? "Insufficient balance." : "Withdrawal failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function handleSaveBank() {
-    setBankSaved(true);
-    setTimeout(() => {
-      setShowBankModal(false);
-      setBankSaved(false);
-    }, 900);
+  async function handleSaveBank() {
+    setBusy(true);
+    try {
+      const b = await saveSellerBank({ bankName, accountNo });
+      setBank(b);
+      setBankSaved(true);
+      setTimeout(() => {
+        setShowBankModal(false);
+        setBankSaved(false);
+      }, 900);
+    } finally {
+      setBusy(false);
+    }
   }
+
+  const cards = [
+    { label: "Total Revenue", value: formatVND(summary.totalRevenue), sub: "All paid orders", icon: TrendingUp, accent: "bg-primary/10 text-primary" },
+    {
+      label: "This Month",
+      value: formatVND(summary.thisMonth),
+      sub: summary.momChangePct === null ? "—" : `${summary.momChangePct >= 0 ? "+" : ""}${summary.momChangePct}% vs last mo`,
+      icon: ArrowUpRight,
+      accent: "bg-green-50 text-green-700",
+    },
+    { label: "Pending Clearance", value: formatVND(summary.pendingClearance), sub: "Not yet delivered", icon: Clock, accent: "bg-amber-50 text-amber-700" },
+    { label: "Wallet Balance", value: formatVND(balance), sub: "Available to withdraw", icon: Wallet, accent: "bg-surface-container text-on-surface-variant" },
+  ];
 
   return (
     <>
@@ -98,12 +140,7 @@ export default function FinancePage() {
 
         {/* Revenue summary cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {[
-            { label: "Total Revenue", value: "$55,840", sub: "All time", icon: TrendingUp, accent: "bg-primary/10 text-primary" },
-            { label: "This Month", value: "$12,480", sub: "+18.2% vs Oct", icon: ArrowUpRight, accent: "bg-green-50 text-green-700" },
-            { label: "Pending Clearance", value: "$892", sub: "Est. 3–5 days", icon: Clock, accent: "bg-amber-50 text-amber-700" },
-            { label: "Total Withdrawn", value: "$8,350", sub: "To bank account", icon: ArrowDownLeft, accent: "bg-surface-container text-on-surface-variant" },
-          ].map((card, i) => {
+          {cards.map((card, i) => {
             const Icon = card.icon;
             return (
               <motion.div
@@ -116,8 +153,8 @@ export default function FinancePage() {
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 ${card.accent}`}>
                   <Icon className="w-4 h-4" />
                 </div>
-                <p className="text-2xl font-bold text-deep-navy tracking-tight mb-0.5">
-                  {card.value}
+                <p className="text-xl font-bold text-deep-navy tracking-tight mb-0.5">
+                  {loading ? "…" : card.value}
                 </p>
                 <p className="text-xs font-semibold text-on-surface-variant">{card.label}</p>
                 <p className="text-[10px] text-outline mt-0.5">{card.sub}</p>
@@ -139,22 +176,18 @@ export default function FinancePage() {
                 <p className="text-label-caps text-primary mb-0.5">Revenue Trend</p>
                 <h2 className="font-bold text-deep-navy">6-Month Overview</h2>
               </div>
-              <button className="flex items-center gap-1.5 text-xs font-bold text-on-surface-variant border border-outline-variant hover:border-deep-navy px-3 py-1.5 rounded-lg transition-colors">
-                <Download className="w-3 h-3" />
-                Export
-              </button>
             </div>
 
             <div className="flex items-end gap-3 mb-3" style={{ height: 140 }}>
-              {MONTHLY_REVENUE.map((bar, i) => {
-                const isLatest = i === MONTHLY_REVENUE.length - 1;
-                const barH = Math.max(4, Math.round((bar.value / MAX_REV) * 116));
+              {revenue.map((bar, i) => {
+                const isLatest = i === revenue.length - 1;
+                const barH = Math.max(4, Math.round((bar.value / maxRev) * 116));
                 return (
-                  <div key={bar.month} className="flex-1 flex flex-col items-center gap-1.5">
+                  <div key={`${bar.month}-${i}`} className="flex-1 flex flex-col items-center gap-1.5">
                     <div className="w-full flex flex-col justify-end" style={{ height: 116 }}>
                       <div className="relative group">
                         <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                          ${(bar.value / 1000).toFixed(1)}k
+                          {formatVND(bar.value)}
                         </div>
                         <motion.div
                           initial={{ height: 0 }}
@@ -178,9 +211,9 @@ export default function FinancePage() {
 
             <div className="pt-4 border-t border-outline-variant grid grid-cols-3 gap-4 text-center">
               {[
-                { label: "Avg / month", value: "$9,297" },
-                { label: "Best month", value: "Nov · $12,480" },
-                { label: "YoY growth", value: "+24%" },
+                { label: "Paid orders", value: String(summary.orderCount) },
+                { label: "This month", value: formatVND(summary.thisMonth) },
+                { label: "Last month", value: formatVND(summary.lastMonth) },
               ].map((s) => (
                 <div key={s.label}>
                   <p className="text-sm font-bold text-deep-navy">{s.value}</p>
@@ -211,28 +244,25 @@ export default function FinancePage() {
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/50 mb-1">
                 Available Balance
               </p>
-              <p className="text-3xl font-bold text-white tracking-tight">$3,240</p>
+              <p className="text-2xl font-bold text-white tracking-tight">{formatVND(balance)}</p>
               <p className="text-xs text-primary-container mt-1">Ready to withdraw</p>
             </div>
 
             <div className="space-y-2.5 mb-5">
               <div className="flex justify-between text-xs">
                 <span className="text-on-surface-variant">Pending clearance</span>
-                <span className="font-bold text-amber-600">$892</span>
+                <span className="font-bold text-amber-600">{formatVND(summary.pendingClearance)}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-on-surface-variant">Total withdrawn</span>
-                <span className="font-bold text-deep-navy">$8,350</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-on-surface-variant">Platform fees (Nov)</span>
-                <span className="font-bold text-on-surface">$29</span>
+                <span className="text-on-surface-variant">Total revenue</span>
+                <span className="font-bold text-deep-navy">{formatVND(summary.totalRevenue)}</span>
               </div>
             </div>
 
             <button
-              onClick={() => setShowWithdrawModal(true)}
-              className="mt-auto w-full h-11 bg-primary-container text-deep-navy text-sm font-bold rounded-xl border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all"
+              onClick={() => { setWithdrawError(null); setShowWithdrawModal(true); }}
+              disabled={balance <= 0}
+              className="mt-auto w-full h-11 bg-primary-container text-deep-navy text-sm font-bold rounded-xl border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all disabled:opacity-50"
             >
               Withdraw Funds
             </button>
@@ -265,21 +295,27 @@ export default function FinancePage() {
             </button>
           </div>
 
-          <div className="flex items-center gap-4 p-4 bg-surface-container-low border border-outline-variant rounded-xl">
-            <div className="w-10 h-10 bg-deep-navy rounded-xl flex items-center justify-center shrink-0">
-              <CreditCard className="w-5 h-5 text-primary-container" />
+          {bankName || accountNo ? (
+            <div className="flex items-center gap-4 p-4 bg-surface-container-low border border-outline-variant rounded-xl">
+              <div className="w-10 h-10 bg-deep-navy rounded-xl flex items-center justify-center shrink-0">
+                <CreditCard className="w-5 h-5 text-primary-container" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-deep-navy text-sm">{bankName || "—"}</p>
+                <p className="text-xs text-on-surface-variant font-mono">
+                  ···· ···· {accountNo.slice(-4)}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-primary">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Saved
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-deep-navy text-sm">{bankName}</p>
-              <p className="text-xs text-on-surface-variant font-mono">
-                ···· ···· {accountNo.slice(-4)}
-              </p>
+          ) : (
+            <div className="p-4 bg-surface-container-low border border-dashed border-outline-variant rounded-xl text-sm text-on-surface-variant text-center">
+              No bank account on file — click Edit to add one.
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-primary">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Verified
-            </div>
-          </div>
+          )}
         </motion.div>
 
         {/* Transaction history */}
@@ -291,67 +327,56 @@ export default function FinancePage() {
         >
           <div className="flex items-center justify-between px-6 py-4 border-b-2 border-deep-navy">
             <h2 className="font-bold text-deep-navy">Transaction History</h2>
-            <button className="flex items-center gap-1.5 text-xs font-bold text-on-surface-variant border border-outline-variant hover:border-deep-navy px-3 py-1.5 rounded-lg transition-colors">
-              <Download className="w-3 h-3" />
-              Download CSV
-            </button>
           </div>
 
           <div className="divide-y divide-outline-variant">
-            {TRANSACTIONS.map((tx) => {
-              const meta = TYPE_META[tx.type];
-              const positive = tx.amount > 0;
-              return (
-                <div
-                  key={tx.id}
-                  className="flex items-center justify-between px-6 py-3.5 hover:bg-surface-container-low transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                        tx.type === "payout"
-                          ? "bg-green-50 border border-green-200"
-                          : tx.type === "refund"
-                          ? "bg-red-50 border border-red-200"
-                          : tx.type === "fee"
-                          ? "bg-surface-container border border-outline-variant"
-                          : "bg-surface-container-high border border-outline-variant"
-                      }`}
-                    >
-                      {positive ? (
-                        <ArrowUpRight className="w-3.5 h-3.5 text-green-600" />
-                      ) : (
-                        <ArrowDownLeft className="w-3.5 h-3.5 text-red-500" />
-                      )}
+            {loading ? (
+              <div className="px-6 py-10 text-center text-sm text-on-surface-variant">Loading…</div>
+            ) : transactions.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-on-surface-variant">No transactions yet.</div>
+            ) : (
+              transactions.map((tx) => {
+                const positive = tx.amount > 0;
+                return (
+                  <div
+                    key={tx.id}
+                    className="flex items-center justify-between px-6 py-3.5 hover:bg-surface-container-low transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          tx.type === "payout"
+                            ? "bg-green-50 border border-green-200"
+                            : "bg-red-50 border border-red-200"
+                        }`}
+                      >
+                        {positive ? (
+                          <ArrowUpRight className="w-3.5 h-3.5 text-green-600" />
+                        ) : (
+                          <ArrowDownLeft className="w-3.5 h-3.5 text-red-500" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-on-surface">{tx.label}</p>
+                        <p className="text-[10px] text-on-surface-variant">{shortDate(tx.date)}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-on-surface">{tx.label}</p>
-                      <p className="text-[10px] text-on-surface-variant">{tx.date}</p>
+                    <div className="text-right shrink-0">
+                      <p className={`text-sm font-bold ${positive ? "text-green-600" : "text-red-600"}`}>
+                        {positive ? "+" : "−"}{formatVND(Math.abs(tx.amount))}
+                      </p>
+                      <span
+                        className={`text-[9px] font-bold uppercase tracking-wider ${
+                          tx.status === "completed" ? "text-primary" : "text-amber-600"
+                        }`}
+                      >
+                        {tx.status}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p
-                      className={`text-sm font-bold ${
-                        positive ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {positive ? "+" : ""}${Math.abs(tx.amount).toFixed(2)}
-                    </p>
-                    <span
-                      className={`text-[9px] font-bold uppercase tracking-wider ${
-                        tx.status === "completed"
-                          ? "text-primary"
-                          : tx.status === "pending"
-                          ? "text-amber-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {tx.status}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </motion.div>
       </div>
@@ -390,28 +415,32 @@ export default function FinancePage() {
                 </div>
 
                 <div className="p-3 bg-surface-container-low border border-outline-variant rounded-xl mb-4 text-xs text-on-surface-variant">
-                  Available: <span className="font-bold text-deep-navy">$3,240.00</span>
+                  Available: <span className="font-bold text-deep-navy">{formatVND(balance)}</span>
                 </div>
 
                 <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2">
-                  Amount ($)
+                  Amount (VND)
                 </label>
                 <input
                   type="number"
                   min={1}
-                  max={3240}
+                  max={balance}
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(e.target.value)}
-                  placeholder="0.00"
+                  placeholder="0"
                   className="block w-full h-12 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none transition-colors mb-2"
                 />
-                <p className="text-[10px] text-on-surface-variant mb-5">
-                  Funds transferred to {bankName} ···· {accountNo.slice(-4)} within 1–3 business days.
-                </p>
+                {withdrawError ? (
+                  <p className="text-[11px] text-red-600 font-semibold mb-5">{withdrawError}</p>
+                ) : (
+                  <p className="text-[10px] text-on-surface-variant mb-5">
+                    Debited from your wallet immediately{bankName ? ` · payout to ${bankName} ···· ${accountNo.slice(-4)}` : ""}.
+                  </p>
+                )}
 
                 <motion.button
                   onClick={handleWithdraw}
-                  disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0}
+                  disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || busy}
                   animate={
                     withdrawDone
                       ? { backgroundColor: "#001a41" }
@@ -428,11 +457,11 @@ export default function FinancePage() {
                         animate={{ opacity: 1, y: 0 }}
                         className="flex items-center justify-center gap-2 text-primary-container"
                       >
-                        <Check className="w-4 h-4" /> Withdrawal Initiated
+                        <Check className="w-4 h-4" /> Withdrawal Complete
                       </motion.span>
                     ) : (
                       <motion.span key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        Confirm Withdrawal
+                        {busy ? "Processing…" : "Confirm Withdrawal"}
                       </motion.span>
                     )}
                   </AnimatePresence>
@@ -482,6 +511,7 @@ export default function FinancePage() {
                       type="text"
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
+                      placeholder="e.g. DNB Bank"
                       className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none transition-colors"
                     />
                   </div>
@@ -493,6 +523,7 @@ export default function FinancePage() {
                       type="text"
                       value={accountNo}
                       onChange={(e) => setAccountNo(e.target.value)}
+                      placeholder="e.g. 1234 56 78901"
                       className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none transition-colors font-mono"
                     />
                   </div>
@@ -500,9 +531,10 @@ export default function FinancePage() {
 
                 <motion.button
                   onClick={handleSaveBank}
+                  disabled={busy}
                   animate={bankSaved ? { backgroundColor: "#001a41" } : { backgroundColor: "#00f3ff" }}
                   transition={{ duration: 0.25 }}
-                  className="w-full h-11 mt-5 text-deep-navy text-sm font-bold rounded-xl border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all"
+                  className="w-full h-11 mt-5 text-deep-navy text-sm font-bold rounded-xl border-2 border-transparent hover:border-deep-navy active:scale-[0.97] transition-all disabled:opacity-50"
                 >
                   <AnimatePresence mode="wait">
                     {bankSaved ? (

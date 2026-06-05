@@ -142,7 +142,9 @@ export const adminSecondFactorAuth = async (userId: string, otp: string) => {
   return { user, tokens, role: role.name };
 };
 
-export const banUser = async (adminId: string, userId: string) => {
+// Shared guard for ban/unban: verifies the caller is an admin/superadmin and the
+// target is a regular account (admins/superadmins can't be (de)activated here).
+const assertCanModerate = async (adminId: string, userId: string) => {
   const [admin, user, adminRole, superadminRole] = await Promise.all([
     User.findById(adminId),
     User.findById(userId),
@@ -166,7 +168,39 @@ export const banUser = async (adminId: string, userId: string) => {
     throw new Error("Cannot ban an admin or superadmin");
   }
 
+  return user;
+};
+
+export const banUser = async (adminId: string, userId: string) => {
+  const user = await assertCanModerate(adminId, userId);
   user.isActive = false;
   await user.save();
   return user;
+};
+
+export const unbanUser = async (adminId: string, userId: string) => {
+  const user = await assertCanModerate(adminId, userId);
+  user.isActive = true;
+  await user.save();
+  return user;
+};
+
+// Admin account directory: every user joined with its role name and current
+// active/verified status. Used by the admin "Account Management" screen.
+export const listUsers = async () => {
+  const users = await User.find({})
+    .populate<{ roleId: { name: string } | null }>("roleId", "name")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return users.map((u: any) => ({
+    id: u._id.toString(),
+    name: u.name,
+    email: u.email,
+    role: u.roleId?.name ?? "user",
+    isActive: u.isActive !== false,
+    isVerified: u.isVerified === true,
+    twoFactorEnabled: u.twoFactorEnabled !== false,
+    createdAt: u.createdAt,
+  }));
 };

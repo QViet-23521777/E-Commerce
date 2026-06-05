@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ShoppingCart, Check, Star } from "lucide-react";
-import { formatVND } from "@/lib/products";
+import { formatVND, fetchShopByProduct } from "@/lib/products";
 import { addToCart } from "@/lib/cart";
 
 export interface ProductCardProps {
@@ -39,10 +39,21 @@ export default function ProductCard({
   const fmt = (n: number) =>
     currency === "VND" ? formatVND(n) : `$${n.toFixed(2)}`;
 
-  const handleAddToCart = () => {
-    addToCart({ productId: String(id), name, image, price, qty: 1 });
+  const handleAddToCart = async () => {
     setAdded(true);
     setTimeout(() => setAdded(false), 1600);
+    // Resolve the owning shop so the cart can group this line by seller (and so
+    // checkout gets the inventory linkage). Falls back to an ungrouped item.
+    const shop = await fetchShopByProduct(String(id)).catch(() => null);
+    addToCart({
+      productId: String(id),
+      name,
+      image,
+      price,
+      qty: 1,
+      sellerId: shop?.sellerId,
+      inventoryId: shop?.inventoryId,
+    });
   };
 
   if (compact) {

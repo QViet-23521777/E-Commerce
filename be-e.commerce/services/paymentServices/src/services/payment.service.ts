@@ -5,7 +5,7 @@ import {
   getMomoPartnerCode,
   verifyMomoIpnSignature,
 } from "./momo.service";
-import { creditWallet, debitWallet } from "./wallet.service";
+import { creditWallet, debitWallet, earnPoints, pointsForAmount } from "./wallet.service";
 
 type CreatePaymentItemInput = {
   productId: string;
@@ -212,15 +212,21 @@ const resolveItemsAndAmount = async (payload: CreatePaymentInput) => {
     };
   });
 
-  const amount = items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const computed = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
-  console.log("[resolveItemsAndAmount] computed amount:", amount);
+  // The charged amount can legitimately differ from the bare item subtotal:
+  // shipping and coupon discounts live in the storefront, not in inventory, so
+  // the backend can't recompute them. Trust the caller's `amount` as the charge
+  // when provided, while still keeping the resolved line items for seller
+  // attribution + stock deduction. Fall back to the item subtotal otherwise.
+  // (This lets a real, fully-priced order also be seller-attributed instead of
+  // forcing an amount-only checkout that records no items.)
+  const amount = payload.amount !== undefined ? Number(payload.amount) : computed;
 
-  if (payload.amount !== undefined && Number(payload.amount) !== amount) {
-    throw new Error(
-      `Provided amount ${payload.amount} does not match computed amount ${amount}`,
-    );
-  }
+  console.log("[resolveItemsAndAmount] amount:", {
+    charged: amount,
+    itemSubtotal: computed,
+  });
 
   return { amount, items };
 };
@@ -428,7 +434,11 @@ export const processMomoIpn = async (payload: any) => {
     throw new Error("Invalid IPN payload");
   }
 
-  if (!verifyMomoIpnSignature(payload)) {
+  // In mock mode there is no real MoMo to produce an HMAC signature, so the
+  // sandbox/return flow confirms the order by posting a synthetic IPN. Skip the
+  // signature check there; the orderId + amount + partnerCode checks below still
+  // guard against confirming an unrelated or tampered order.
+  if (process.env.MOMO_MOCK !== "true" && !verifyMomoIpnSignature(payload)) {
     throw new Error("Invalid MoMo IPN signature");
   }
 
@@ -468,6 +478,16 @@ export const processMomoIpn = async (payload: any) => {
     // Flow nạp ví → cộng số dư
     if (payment.walletId && payment.items.length === 0) {
       await creditWallet(payment.userId, payment.amount);
+    }
+
+    // Award loyalty points for purchases (not wallet top-ups). Idempotent: a
+    // re-fired IPN sees pointsAwarded already set and skips.
+    if (payment.items.length > 0 && !payment.pointsAwarded) {
+      const earned = pointsForAmount(payment.amount);
+      if (earned > 0) {
+        await earnPoints(payment.userId, earned, payment.orderId);
+        payment.pointsAwarded = earned;
+      }
     }
 
     payment.status = "paid";
@@ -556,6 +576,15 @@ export const checkoutWithWallet = async (
   console.log("[checkoutWithWallet] payment record created", {
     paymentId: payment._id,
   });
+
+  // Award loyalty points for the purchase. A wallet checkout is always a real
+  // purchase (never a top-up), so award on the order amount.
+  const earned = pointsForAmount(amount);
+  if (earned > 0) {
+    await earnPoints(userId, earned, orderId);
+    payment.pointsAwarded = earned;
+    await payment.save();
+  }
 
   return normalizePaymentResponse(payment);
 };

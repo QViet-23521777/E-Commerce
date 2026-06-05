@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
+import { mergeCartOnLogin } from "@/lib/cart";
 import OtpInput from "@/components/OtpInput";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -56,6 +57,8 @@ function LoginForm() {
       // returned usable tokens — sign in directly and skip the OTP step.
       if (res.data.twoFactorEnabled === false) {
         saveTokens(res.tokens.accessToken, res.tokens.refreshToken);
+        // Fold any guest cart built before sign-in into the account cart.
+        await mergeCartOnLogin();
         window.location.assign(redirectTo);
         return;
       }
@@ -84,6 +87,8 @@ function LoginForm() {
         body: { userId, otp: code },
       });
       saveTokens(res.tokens.accessToken, res.tokens.refreshToken);
+      // Fold any guest cart built before sign-in into the account cart.
+      await mergeCartOnLogin();
       // Full navigation so the Navbar (and other on-mount auth reads) refresh.
       window.location.assign(redirectTo);
     } catch (err: unknown) {

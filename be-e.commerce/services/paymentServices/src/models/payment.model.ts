@@ -57,6 +57,9 @@ export interface IPayment extends Document {
   ipnPayload?: Record<string, unknown>;
   paidAt?: Date | null;
   failedAt?: Date | null;
+  // Loyalty points already credited for this order. Guards against a re-fired
+  // MoMo IPN double-awarding points for the same paid order.
+  pointsAwarded: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -128,6 +131,7 @@ const PaymentSchema = new Schema<IPayment>(
     ipnPayload: { type: Schema.Types.Mixed, default: null },
     paidAt: { type: Date, default: null },
     failedAt: { type: Date, default: null },
+    pointsAwarded: { type: Number, default: 0 },
   },
   {
     timestamps: true,

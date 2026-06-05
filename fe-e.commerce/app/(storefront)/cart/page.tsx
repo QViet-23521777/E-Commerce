@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Loader2,
   Check,
+  Store,
 } from "lucide-react";
 import Link from "next/link";
 import { formatVND } from "@/lib/products";
@@ -22,7 +23,9 @@ import {
   cartSubtotal,
   setAppliedCoupon,
   getAppliedCoupon,
+  type CartItem,
 } from "@/lib/cart";
+import { fetchSellerPublicProfile } from "@/lib/seller";
 import {
   fetchActivePromotions,
   validatePromotion,
@@ -45,6 +48,60 @@ export default function CartPage() {
   const [offers, setOffers] = useState<Promotion[]>([]);
 
   const subtotal = useMemo(() => cartSubtotal(items), [items]);
+
+  // Resolve a friendly shop name for every distinct seller in the cart so the
+  // basket can be grouped per shop (a cart commonly mixes several sellers).
+  const [shopNames, setShopNames] = useState<Record<string, string>>({});
+  const sellerIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const i of items) if (i.sellerId) ids.add(i.sellerId);
+    return Array.from(ids);
+  }, [items]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const missing = sellerIds.filter((id) => !(id in shopNames));
+    if (missing.length === 0) return;
+    (async () => {
+      const entries = await Promise.all(
+        missing.map(async (id) => {
+          const shop = await fetchSellerPublicProfile(id).catch(() => null);
+          return [id, shop?.name?.trim() || "Shop"] as const;
+        }),
+      );
+      if (!cancelled) {
+        setShopNames((prev) => {
+          const next = { ...prev };
+          for (const [id, name] of entries) next[id] = name;
+          return next;
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sellerIds, shopNames]);
+
+  // Group cart lines by shop. Items with no seller linkage fall into a trailing
+  // "Other items" group so legacy/demo entries still render.
+  const groups = useMemo(() => {
+    const byShop = new Map<string, CartItem[]>();
+    for (const item of items) {
+      const key = item.sellerId || "__other__";
+      const list = byShop.get(key) ?? [];
+      list.push(item);
+      byShop.set(key, list);
+    }
+    return Array.from(byShop.entries()).map(([sellerId, groupItems]) => ({
+      sellerId,
+      name:
+        sellerId === "__other__"
+          ? "Other items"
+          : shopNames[sellerId] ?? "Shop",
+      items: groupItems,
+      subtotal: cartSubtotal(groupItems),
+    }));
+  }, [items, shopNames]);
 
   // Available offers (public endpoint).
   useEffect(() => {
@@ -205,10 +262,28 @@ export default function CartPage() {
           )}
 
           <div className="grid lg:grid-cols-3 gap-8">
-            {/* Items list */}
-            <div className="lg:col-span-2 space-y-3">
+            {/* Items list — grouped by shop */}
+            <div className="lg:col-span-2 space-y-6">
+              {groups.map((group) => (
+                <div key={group.sellerId} className="space-y-3">
+                  {/* Shop header */}
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg border-2 border-deep-navy/15 bg-surface-container flex items-center justify-center">
+                        <Store className="w-3.5 h-3.5 text-deep-navy" />
+                      </div>
+                      <span className="text-sm font-bold text-deep-navy">{group.name}</span>
+                      <span className="text-[11px] text-on-surface-variant">
+                        · {group.items.length} {group.items.length === 1 ? "item" : "items"}
+                      </span>
+                    </div>
+                    <span className="text-xs font-semibold text-on-surface-variant">
+                      {formatVND(group.subtotal)}
+                    </span>
+                  </div>
+
               <AnimatePresence mode="popLayout">
-                {items.map((item) => (
+                {group.items.map((item) => (
                   <motion.div
                     key={item.productId}
                     layout
@@ -285,6 +360,8 @@ export default function CartPage() {
                   </motion.div>
                 ))}
               </AnimatePresence>
+                </div>
+              ))}
 
               {/* Available offers */}
               {offers.length > 0 && (

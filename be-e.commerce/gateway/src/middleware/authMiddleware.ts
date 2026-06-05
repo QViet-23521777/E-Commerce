@@ -72,7 +72,11 @@ export const checkAdminAuthorization = async (c: Context, next: Next) => {
   console.log("Role type:", typeof role);
   console.log("Role length:", role?.length);
 
-  if (role !== "admin") {
+  // A superadmin is strictly more privileged than an admin and must pass any
+  // admin gate. The admin auth service (admin.services.ts) already treats both
+  // roles as valid admins and stamps the JWT role accordingly, so the seeded
+  // superadmin would otherwise be locked out of every admin-only route here.
+  if (role !== "admin" && role !== "superadmin") {
     return c.json(
       {
         success: false,

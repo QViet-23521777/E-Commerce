@@ -27,7 +27,13 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
         />
       </head>
-      <body className={`${inter.variable} ${inter.className} antialiased bg-background text-on-surface`}>
+      {/* suppressHydrationWarning: browser extensions (e.g. ColorZilla's
+          `cz-shortcut-listen`, Grammarly, etc.) inject attributes onto <body>
+          before React hydrates, which otherwise logs a benign mismatch. */}
+      <body
+        suppressHydrationWarning
+        className={`${inter.variable} ${inter.className} antialiased bg-background text-on-surface`}
+      >
         {children}
         <ChatWidget />
       </body>

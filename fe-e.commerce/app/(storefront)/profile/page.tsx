@@ -25,6 +25,8 @@ import {
   ShieldCheck,
   ShoppingBag,
   Loader2,
+  Gift,
+  ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
@@ -32,16 +34,33 @@ import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { apiRequest } from "@/lib/api";
 import { clearTokens, getAccessToken, getUser } from "@/lib/auth";
+import { clearLocalCart } from "@/lib/cart";
 import { fetchMyProfile, updateMyProfile, type UserProfileData } from "@/lib/user";
-import { fetchWallet, creditWallet, type Wallet as WalletData } from "@/lib/wallet";
+import {
+  fetchWallet,
+  fetchPoints,
+  redeemPoints,
+  type Wallet as WalletData,
+  type PointsSummary,
+} from "@/lib/wallet";
 import { fetchActivityHistory, type ActivityRecord } from "@/lib/activity";
-import { formatVND } from "@/lib/products";
+import { formatVND, fetchProductById, type UIProduct } from "@/lib/products";
+import {
+  fetchMyOrders,
+  FULFILLMENT_LABEL,
+  type Order,
+  type FulfillmentStatus,
+} from "@/lib/orders";
+import { fetchWishlist, removeFromWishlist } from "@/lib/wishlist";
+import { fetchAddresses, saveAddresses, type Address } from "@/lib/address";
+import { fetchActivePromotions, type Promotion } from "@/lib/promotions";
 import TwoFactorToggle from "@/components/TwoFactorToggle";
 
 type TabId =
   | "overview"
   | "activity"
   | "wishlist"
+  | "rewards"
   | "vouchers"
   | "settings"
   | "change-password";
@@ -50,6 +69,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-4 h-4" /> },
   { id: "activity", label: "Activity", icon: <History className="w-4 h-4" /> },
   { id: "wishlist", label: "Wishlist", icon: <Heart className="w-4 h-4" /> },
+  { id: "rewards", label: "Rewards", icon: <Gift className="w-4 h-4" /> },
   { id: "vouchers", label: "Vouchers", icon: <Ticket className="w-4 h-4" /> },
   { id: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
   { id: "change-password", label: "Security", icon: <Settings className="w-4 h-4" /> },
@@ -70,83 +90,35 @@ function formatMemberSince(iso?: string): string {
   return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
-const ORDERS = [
-  {
-    id: "4920",
-    status: "Delivered",
-    statusColor: "text-primary",
-    date: "Oct 12, 2024",
-    total: "$320.00",
-    items: ["Hand-Woven Bamboo Lamp", "Linen Throw"],
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBqiE_3yYfaa9MGAf4ckjwM4q7Mqu2_Iz1nKbpM0LLiQiglJWVhM0M2cfKayFDUrfgnwhjus7cAj6Jm4tLDHon9-mSigEVHGvRoiKbCZGnDSEk6mTI3Ilu7ivPq83PedR7syPOMj7Echsltht2GcxDbvBHGrK2XDC3utMl7Hq4ZKuy1vCBtuybpYu4hfAVauclNgV2rdeiE4NS6_ImSl5Hcc74MRjZAc2-3ub60TPbLQ-qGPv4ZSop3evz7-r4Hh7LmhrVVRrYJzAyt",
-  },
-  {
-    id: "4918",
-    status: "Processing",
-    statusColor: "text-secondary",
-    date: "Nov 3, 2024",
-    total: "$145.50",
-    items: ["V60 Ceramic Dripper"],
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDuYPHC5ZucXkMLQdPzRtMwA5fwVf4vodbpXzIAj1S6x4XKjM2fAlF7-u-Z-AU3MWyNLivbqT5NJVyhECEfYebs0h9qutzgtz955zo46r6UKJ_32aNcoy_7_fNGgqJzQY7CDeFPibKGTiQOwhV3lPfA9eC6I9W4_XCDYFh4FgdiwfC_x7VTV8hox8fmMw3BIDeUe8i7OCB11qcswwjZTdPA83Cj2SJY5IbVEXpLsg6dQg6vLyyj5o-lN_LUe6-ocebtxqygqhHLieN3",
-  },
-];
+// ── Order display helpers ─────────────────────────────────────────────────────
 
-const WISHLIST = [
-  {
-    id: 1,
-    name: "Essential Tee",
-    price: "$45.00",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBQnttJbzpiC4QRt8GQvgN_K-LPivaoWxQbJdHzb6kosJGev_3CVhSB--6w9rlF8agmBGyseznO-fU5e1Y510XVbDyymty-zPapnIeQH0i2v-czpBGaZUG686ds_gVZg8Yt2DZzTsztQzLti-onPa5W4qfl6OsvhvxKFZgqmbBaWe72wtwVwwZQuR9HEBPYH3t82nWIzD50ODtN_69mApTqtSBSltL2RWLb-lr-ZAJHgfzLF2T9M8XCj94gw-qjt3zBlxgWDXT7jHus",
-  },
-  {
-    id: 2,
-    name: "Canvas Runner",
-    price: "$120.00",
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBEFirrcDk_MGZVSgIh0HkV36UXMReWFCUmRrxoMFgIhks4x_ZjGdrOi2sUWXB_9R0NaUU7MVmhoqjFxo5_9JA9lOKMnc1xdphCtBJQj6SBAXqrc-dCPeSbM4oGqCwgrjXCItbiU-Sg--uZ4Y49um0K_Jjn1fvsI7_xnZvhuuyBbhhN5cPCeSwxgb6KraO3FNpwmpW0eCzcHee7t4hHa3wpFSiKrVSHaVFb2mh2rRwOCqEWH3M8B7I0XSaa-7IMyZtPS9qhuUp37wnL",
-  },
-];
-
-// ── Address Book ──────────────────────────────────────────────────────────────
-
-type Address = {
-  id: number;
-  label: string;
-  name: string;
-  line1: string;
-  line2: string;
-  city: string;
-  zip: string;
-  country: string;
-  phone: string;
-  isDefault: boolean;
+// Map a fulfilment status to the accent colour used in the orders list.
+const FULFILLMENT_COLOR: Record<FulfillmentStatus, string> = {
+  to_confirm: "text-secondary",
+  processing: "text-secondary",
+  shipped: "text-primary",
+  delivered: "text-primary",
+  cancelled: "text-error",
 };
 
-const INITIAL_ADDRESSES: Address[] = [
-  {
-    id: 1,
-    label: "Home",
-    name: "Alex Nordström",
-    line1: "14 Fjord Street",
-    line2: "Apt 3B",
-    city: "Oslo",
-    zip: "0150",
-    country: "Norway",
-    phone: "+47 22 33 44 55",
-    isDefault: true,
-  },
-  {
-    id: 2,
-    label: "Work",
-    name: "Alex Nordström",
-    line1: "Storgata 1",
-    line2: "Floor 4, Suite 401",
-    city: "Bergen",
-    zip: "5003",
-    country: "Norway",
-    phone: "+47 55 66 77 88",
-    isDefault: false,
-  },
-];
+// An order is "active" while it's still in flight (not delivered or cancelled).
+function isActiveOrder(o: Order): boolean {
+  const s = o.fulfillmentStatus;
+  return s === "to_confirm" || s === "processing" || s === "shipped";
+}
+
+function formatOrderDate(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+// ── Address Book ──────────────────────────────────────────────────────────────
 
 const EMPTY_ADDR = {
   label: "",
@@ -404,62 +376,213 @@ function ActivityTab({ records, loading }: { records: ActivityRecord[]; loading:
 
 // ── Vouchers ──────────────────────────────────────────────────────────────────
 
-type Voucher = {
-  code: string;
-  discount: string;
-  description: string;
-  expiry: string;
-  category: string;
-  isUsed: boolean;
-  isExpired?: boolean;
-};
+// Headline label for a promotion, e.g. "25% OFF" or "₫50,000 OFF".
+function promoDiscountLabel(p: Promotion): string {
+  return p.discountType === "percentage"
+    ? `${p.discountValue}% OFF`
+    : `${formatVND(p.discountValue)} OFF`;
+}
 
-const VOUCHERS: Voucher[] = [
-  {
-    code: "FROST25",
-    discount: "25% OFF",
-    description: "Quarter off your entire order",
-    expiry: "Dec 31, 2024",
-    category: "All items",
-    isUsed: false,
-  },
-  {
-    code: "SHIP10",
-    discount: "Free Shipping",
-    description: "No shipping on any order",
-    expiry: "Nov 30, 2024",
-    category: "Min. order $50",
-    isUsed: false,
-  },
-  {
-    code: "NORDIC50",
-    discount: "$50 OFF",
-    description: "Flat discount on premium items",
-    expiry: "Dec 15, 2024",
-    category: "Min. order $200",
-    isUsed: false,
-  },
-  {
-    code: "WELCOME15",
-    discount: "15% OFF",
-    description: "Welcome discount — first order only",
-    expiry: "Jan 15, 2024",
-    category: "First order",
-    isUsed: true,
-  },
-  {
-    code: "SUMMER20",
-    discount: "20% OFF",
-    description: "Summer collection special",
-    expiry: "Sep 1, 2024",
-    category: "Kitchenware",
-    isUsed: false,
-    isExpired: true,
-  },
-];
+function promoConditionLabel(p: Promotion): string {
+  return p.minOrderAmount > 0
+    ? `Min. order ${formatVND(p.minOrderAmount)}`
+    : "All items";
+}
+
+function RewardsTab({
+  summary,
+  loading,
+  onRedeem,
+}: {
+  summary: PointsSummary | null;
+  loading: boolean;
+  onRedeem: (points: number) => Promise<void>;
+}) {
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-on-surface-variant">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    );
+  }
+
+  const balance = summary?.points ?? 0;
+  const lifetime = summary?.lifetimePoints ?? 0;
+  const tier = summary?.tier ?? "Member";
+  const rate = summary?.pointValueVnd ?? 10;
+  const minRedeem = summary?.minRedeem ?? 100;
+  const step = summary?.redeemStep ?? 100;
+  const history = summary?.history ?? [];
+
+  const parsed = Number(amount);
+  const valid =
+    Number.isInteger(parsed) &&
+    parsed >= minRedeem &&
+    parsed % step === 0 &&
+    parsed <= balance;
+  const previewVnd = Number.isFinite(parsed) && parsed > 0 ? parsed * rate : 0;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    if (!valid) {
+      setError(
+        parsed > balance
+          ? "You don't have that many points."
+          : `Redeem at least ${minRedeem} points, in multiples of ${step}.`,
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      await onRedeem(parsed);
+      setSuccess(`Redeemed ${parsed.toLocaleString()} points for ${formatVND(parsed * rate)} wallet credit.`);
+      setAmount("");
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status;
+      setError(
+        status === 402
+          ? "You don't have enough points."
+          : (err as { message?: string })?.message ?? "Couldn't redeem points.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-10">
+      {/* Balance + tier */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="bg-deep-navy text-white rounded-2xl p-6">
+          <div className="flex items-center gap-2 text-ice-blue/60">
+            <Star className="w-4 h-4" />
+            <p className="text-label-caps uppercase tracking-widest text-xs">Points Balance</p>
+          </div>
+          <p className="text-4xl font-bold mt-2">{balance.toLocaleString()}</p>
+          <p className="text-xs text-ice-blue/60 mt-1">
+            Worth {formatVND(balance * rate)} in wallet credit
+          </p>
+        </div>
+        <div className="bg-white border-2 border-deep-navy rounded-2xl p-6">
+          <div className="flex items-center gap-2 text-primary">
+            <Gift className="w-4 h-4" />
+            <p className="text-label-caps uppercase tracking-widest text-xs">Tier</p>
+          </div>
+          <p className="text-2xl font-bold text-deep-navy mt-2">{tier}</p>
+          <p className="text-xs text-on-surface-variant mt-1">
+            {lifetime.toLocaleString()} points earned all-time
+          </p>
+        </div>
+      </div>
+
+      {/* Redeem */}
+      <div>
+        <div className="flex items-center gap-2.5 pb-4 border-b-2 border-deep-navy mb-5">
+          <div className="w-5 h-px bg-primary-container flex-shrink-0" />
+          <p className="text-label-caps text-primary">Redeem</p>
+        </div>
+        <form onSubmit={submit} className="bg-white border-2 border-deep-navy/10 rounded-2xl p-6 space-y-4">
+          <p className="text-sm text-on-surface-variant">
+            Convert points into wallet credit. Each point is worth {formatVND(rate)};
+            redeem from {minRedeem.toLocaleString()} points in steps of {step}.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div className="flex-1">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Points to redeem</label>
+              <input
+                type="number"
+                min={minRedeem}
+                step={step}
+                value={amount}
+                onChange={(e) => { setAmount(e.target.value); setError(""); setSuccess(""); }}
+                placeholder={String(minRedeem)}
+                className="mt-1 w-full h-11 px-3 border-2 border-deep-navy/15 focus:border-deep-navy rounded-xl outline-none text-sm font-bold text-deep-navy bg-white transition-colors"
+              />
+            </div>
+            <div className="text-sm font-bold text-deep-navy sm:pb-3 sm:w-32">
+              = {formatVND(previewVnd)}
+            </div>
+            <button
+              type="submit"
+              disabled={busy || !valid}
+              className="h-11 px-6 bg-deep-navy text-primary-container font-bold text-sm uppercase tracking-widest rounded-xl hover:bg-primary hover:text-deep-navy transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97] shrink-0"
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Redeem"}
+            </button>
+          </div>
+          {error && <p className="text-xs font-bold text-error">{error}</p>}
+          {success && (
+            <p className="text-xs font-bold text-primary flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5" /> {success}
+            </p>
+          )}
+        </form>
+      </div>
+
+      {/* History */}
+      <div>
+        <div className="flex items-center gap-2.5 pb-4 border-b-2 border-deep-navy mb-5">
+          <div className="w-5 h-px bg-primary-container flex-shrink-0" />
+          <p className="text-label-caps text-primary">History</p>
+        </div>
+        {history.length === 0 ? (
+          <div className="text-center py-12 border-2 border-dashed border-outline-variant rounded-2xl">
+            <Star className="w-10 h-10 text-outline mx-auto mb-3" />
+            <p className="text-sm font-bold text-on-surface">No points activity yet</p>
+            <p className="text-xs text-on-surface-variant mt-1">Earn points on your next purchase.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {history.map((t) => {
+              const earn = t.type === "earn";
+              return (
+                <div key={t.id} className="flex items-center gap-4 p-4 bg-white border border-deep-navy/15 rounded-xl">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${earn ? "bg-primary-container/20 text-primary" : "bg-secondary/10 text-secondary"}`}>
+                    {earn ? <Star className="w-4 h-4" /> : <Wallet className="w-4 h-4" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-deep-navy">{earn ? "Points earned" : "Redeemed for credit"}</p>
+                    <p className="text-xs text-on-surface-variant truncate">{formatOrderDate(t.createdAt)}{!earn && t.valueVnd ? ` · ${formatVND(t.valueVnd)} credit` : ""}</p>
+                  </div>
+                  <span className={`text-sm font-bold shrink-0 ${earn ? "text-primary" : "text-secondary"}`}>
+                    {earn ? "+" : "−"}{t.points.toLocaleString()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function VouchersTab() {
   const [copied, setCopied] = useState<string | null>(null);
+  const [promos, setPromos] = useState<Promotion[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const data = await fetchActivePromotions();
+        if (alive) setPromos(data);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function copyCode(code: string) {
     navigator.clipboard.writeText(code).catch(() => {});
@@ -467,8 +590,13 @@ function VouchersTab() {
     setTimeout(() => setCopied(null), 1800);
   }
 
-  const active = VOUCHERS.filter((v) => !v.isUsed && !v.isExpired);
-  const inactive = VOUCHERS.filter((v) => v.isUsed || v.isExpired);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-on-surface-variant">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10">
@@ -478,11 +606,11 @@ function VouchersTab() {
           <div className="w-5 h-px bg-primary-container flex-shrink-0" />
           <p className="text-label-caps text-primary">Available</p>
           <span className="ml-auto text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-            {active.length} voucher{active.length !== 1 ? "s" : ""}
+            {promos.length} voucher{promos.length !== 1 ? "s" : ""}
           </span>
         </div>
 
-        {active.length === 0 ? (
+        {promos.length === 0 ? (
           <div className="text-center py-12 border-2 border-dashed border-outline-variant rounded-2xl">
             <Ticket className="w-10 h-10 text-outline mx-auto mb-3" />
             <p className="text-sm font-bold text-on-surface">No active vouchers</p>
@@ -490,9 +618,9 @@ function VouchersTab() {
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {active.map((v) => (
+            {promos.map((v) => (
               <motion.div
-                key={v.code}
+                key={v.id}
                 variants={fadeUp}
                 className="relative bg-white border-2 border-deep-navy rounded-2xl overflow-hidden group"
               >
@@ -505,8 +633,8 @@ function VouchersTab() {
                 </div>
 
                 <div className="p-5 pb-0">
-                  <p className="text-2xl font-bold text-deep-navy tracking-tight">{v.discount}</p>
-                  <p className="text-xs text-on-surface-variant mt-0.5 mb-5">{v.description}</p>
+                  <p className="text-2xl font-bold text-deep-navy tracking-tight">{promoDiscountLabel(v)}</p>
+                  <p className="text-xs text-on-surface-variant mt-0.5 mb-5">{v.description || v.title}</p>
                 </div>
 
                 <div className="px-5 pt-5 pb-4 space-y-3">
@@ -547,8 +675,8 @@ function VouchersTab() {
                   </div>
 
                   <div className="flex items-center justify-between text-[10px] text-on-surface-variant font-semibold">
-                    <span>{v.category}</span>
-                    <span>Expires {v.expiry}</span>
+                    <span>{promoConditionLabel(v)}</span>
+                    <span>Expires {formatOrderDate(v.endDate)}</span>
                   </div>
                 </div>
               </motion.div>
@@ -556,37 +684,6 @@ function VouchersTab() {
           </div>
         )}
       </div>
-
-      {/* Used / Expired */}
-      {inactive.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2.5 pb-4 border-b border-deep-navy/15 mb-5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-              Used &amp; Expired
-            </p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {inactive.map((v) => (
-              <div
-                key={v.code}
-                className="relative border-2 border-deep-navy/10 rounded-2xl p-5 opacity-50 overflow-hidden"
-              >
-                <div className="h-1 bg-surface-container-high w-full absolute top-0 left-0" />
-                <p className="text-xl font-bold text-on-surface-variant tracking-tight mt-2">{v.discount}</p>
-                <p className="text-xs text-outline mt-0.5 mb-4">{v.description}</p>
-                <div className="flex items-center justify-between">
-                  <code className="text-xs font-mono text-outline border border-outline/20 px-2 py-0.5 rounded-lg tracking-widest">
-                    {v.code}
-                  </code>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-outline">
-                    {v.isUsed ? "Used" : "Expired"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -798,23 +895,28 @@ const fadeUp = {
 export default function ProfilePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>("overview");
-  const [wishlist, setWishlist] = useState(WISHLIST);
+
+  // ── Wishlist (server-backed) ──
+  const [wishlist, setWishlist] = useState<UIProduct[]>([]);
+  const [wishlistLoading, setWishlistLoading] = useState(true);
 
   // ── Live account data ──
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [loadingAccount, setLoadingAccount] = useState(true);
 
+  // ── Orders (real) ──
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+
+  // ── Loyalty points (server-backed) ──
+  const [points, setPoints] = useState<PointsSummary | null>(null);
+  const [pointsLoading, setPointsLoading] = useState(true);
+
   // ── Activity history ──
   const [activity, setActivity] = useState<ActivityRecord[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityLoaded, setActivityLoaded] = useState(false);
-
-  // ── Wallet top-up modal ──
-  const [showTopUp, setShowTopUp] = useState(false);
-  const [topUpAmount, setTopUpAmount] = useState("");
-  const [topUpLoading, setTopUpLoading] = useState(false);
-  const [topUpError, setTopUpError] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -830,6 +932,82 @@ export default function ProfilePage() {
     })();
     return () => { alive = false; };
   }, []);
+
+  // Load real orders for the "Recent Orders" list and the Active-Orders stat.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const data = await fetchMyOrders();
+        if (alive) setOrders(data);
+      } catch {
+        if (alive) setOrders([]);
+      } finally {
+        if (alive) setOrdersLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // Load the real loyalty-points summary (balance, tier, history).
+  const reloadPoints = useCallback(async () => {
+    try {
+      const summary = await fetchPoints();
+      setPoints(summary);
+    } catch {
+      setPoints(null);
+    } finally {
+      setPointsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reloadPoints();
+  }, [reloadPoints]);
+
+  // Redeem points → wallet credit. Refreshes both the wallet balance shown in
+  // the overview and the points summary (balance + history). Throws on failure
+  // so the Rewards tab can surface the error.
+  async function handleRedeemPoints(n: number) {
+    const updated = await redeemPoints(n);
+    setWallet((w) =>
+      w
+        ? { ...w, balance: updated.balance, points: updated.points }
+        : updated,
+    );
+    await reloadPoints();
+  }
+
+  // Load the server-backed wishlist, then hydrate each id into a full product
+  // so the cards can show name / price / image.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const ids = await fetchWishlist();
+        const products = await Promise.all(ids.map((id) => fetchProductById(id)));
+        if (alive) {
+          setWishlist(products.filter((p): p is UIProduct => p !== null));
+        }
+      } catch {
+        if (alive) setWishlist([]);
+      } finally {
+        if (alive) setWishlistLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const activeOrderCount = orders.filter(isActiveOrder).length;
+
+  async function removeWish(id: string) {
+    setWishlist((wl) => wl.filter((w) => w.id !== id));
+    try {
+      await removeFromWishlist(id);
+    } catch {
+      // Best-effort; a failed sync just leaves the item server-side until reload.
+    }
+  }
 
   const loadActivity = useCallback(async () => {
     const u = getUser();
@@ -848,40 +1026,38 @@ export default function ProfilePage() {
     if (activeTab === "activity" && !activityLoaded) loadActivity();
   }, [activeTab, activityLoaded, loadActivity]);
 
-  async function handleTopUp(e: React.FormEvent) {
-    e.preventDefault();
-    setTopUpError("");
-    const amount = Math.floor(Number(topUpAmount));
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setTopUpError("Enter a positive amount.");
-      return;
-    }
-    setTopUpLoading(true);
-    try {
-      const updated = await creditWallet(amount);
-      setWallet(updated);
-      setShowTopUp(false);
-      setTopUpAmount("");
-    } catch (err: unknown) {
-      setTopUpError((err as { message?: string })?.message ?? "Top-up failed.");
-    } finally {
-      setTopUpLoading(false);
-    }
-  }
-
-  const TOPUP_PRESETS = [50000, 100000, 200000, 500000];
-
   function handleLogout() {
     clearTokens();
+    clearLocalCart();
     router.push("/login");
   }
 
-  // Address state
-  const [addresses, setAddresses] = useState<Address[]>(INITIAL_ADDRESSES);
+  // Address state (server-backed). Edits mutate the local list, then the whole
+  // list is persisted via `persistAddresses` (whole-array PUT).
+  const [addresses, setAddresses] = useState<Address[]>([]);
   const [showAddrForm, setShowAddrForm] = useState(false);
   const [editingAddrId, setEditingAddrId] = useState<number | null>(null);
   const [addrForm, setAddrForm] = useState({ ...EMPTY_ADDR });
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const data = await fetchAddresses();
+        if (alive) setAddresses(data);
+      } catch {
+        if (alive) setAddresses([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // Persist the next list to the server (best-effort) and update local state.
+  function persistAddresses(next: Address[]) {
+    setAddresses(next);
+    saveAddresses(next).catch(() => {});
+  }
 
   function openAddAddress() {
     setAddrForm({ ...EMPTY_ADDR });
@@ -906,22 +1082,24 @@ export default function ProfilePage() {
 
   function saveAddress() {
     if (editingAddrId !== null) {
-      setAddresses((prev) => prev.map((a) => (a.id === editingAddrId ? { ...a, ...addrForm } : a)));
+      persistAddresses(
+        addresses.map((a) => (a.id === editingAddrId ? { ...a, ...addrForm } : a)),
+      );
     } else {
-      setAddresses((prev) => [
-        ...prev,
-        { id: Date.now(), ...addrForm, isDefault: prev.length === 0 },
+      persistAddresses([
+        ...addresses,
+        { id: Date.now(), ...addrForm, isDefault: addresses.length === 0 },
       ]);
     }
     setShowAddrForm(false);
   }
 
   function setDefaultAddress(id: number) {
-    setAddresses((prev) => prev.map((a) => ({ ...a, isDefault: a.id === id })));
+    persistAddresses(addresses.map((a) => ({ ...a, isDefault: a.id === id })));
   }
 
   function removeAddress(id: number) {
-    setAddresses((prev) => prev.filter((a) => a.id !== id));
+    persistAddresses(addresses.filter((a) => a.id !== id));
     setConfirmDeleteId(null);
   }
 
@@ -1009,12 +1187,10 @@ export default function ProfilePage() {
                         <p className="text-xs text-ice-blue/50 mt-0.5">ShopIn Wallet</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => { setShowTopUp(true); setTopUpError(""); }}
-                      className="mt-4 flex items-center justify-center gap-1.5 h-9 bg-primary-container text-deep-navy text-[11px] font-bold uppercase tracking-widest rounded-xl border-2 border-transparent hover:border-primary-container hover:bg-transparent hover:text-primary-container transition-all duration-150 active:scale-[0.97]"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Top Up
-                    </button>
+                    <div className="mt-4 flex items-center gap-1.5 h-9 px-3 border border-ice-blue/20 rounded-xl text-[10px] font-medium text-ice-blue/60">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                      Top-ups are added by an administrator.
+                    </div>
                   </motion.div>
 
                   <motion.div
@@ -1026,24 +1202,29 @@ export default function ProfilePage() {
                     </div>
                     <div>
                       <p className="text-label-caps text-on-surface-variant uppercase tracking-widest text-xs">Active Orders</p>
-                      <p className="text-2xl font-bold text-deep-navy mt-0.5">{ORDERS.length}</p>
+                      <p className="text-2xl font-bold text-deep-navy mt-0.5">{ordersLoading ? "…" : activeOrderCount}</p>
                       <p className="text-xs text-on-surface-variant mt-0.5">In progress</p>
                     </div>
                   </motion.div>
 
-                  <motion.div
+                  <motion.button
+                    type="button"
                     variants={fadeUp}
-                    className="bg-white border-2 border-deep-navy rounded-2xl p-6 flex items-start gap-4"
+                    onClick={() => setActiveTab("rewards")}
+                    className="text-left bg-white border-2 border-deep-navy rounded-2xl p-6 flex items-start gap-4 hover:bg-surface-container-low transition-colors duration-150 group"
                   >
                     <div className="w-12 h-12 bg-primary-container/20 border-2 border-primary-container/30 rounded-xl flex items-center justify-center text-primary shrink-0">
                       <Star className="w-5 h-5" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-label-caps text-on-surface-variant uppercase tracking-widest text-xs">Loyalty Points</p>
-                      <p className="text-2xl font-bold text-deep-navy mt-0.5">1,450</p>
-                      <p className="text-xs text-on-surface-variant mt-0.5">Elite Status</p>
+                      <p className="text-2xl font-bold text-deep-navy mt-0.5">{pointsLoading ? "…" : (points?.points ?? 0).toLocaleString()}</p>
+                      <p className="text-xs text-primary font-bold mt-0.5 flex items-center gap-1">
+                        {points?.tier ?? "Member"}
+                        <ArrowRight className="w-3 h-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                      </p>
                     </div>
-                  </motion.div>
+                  </motion.button>
                 </motion.div>
 
                 {/* Recent orders */}
@@ -1054,32 +1235,59 @@ export default function ProfilePage() {
                       View All
                     </Link>
                   </div>
-                  <div className="space-y-4">
-                    {ORDERS.map((order) => (
-                      <div key={order.id} className="flex items-center gap-5 p-5 bg-white border border-deep-navy/20 rounded-2xl hover:border-deep-navy transition-colors duration-150">
-                        <div className="w-16 h-16 border border-deep-navy/20 rounded-xl overflow-hidden bg-surface-container-low shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={order.image} alt="" className="w-full h-full object-cover" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-bold text-deep-navy">Order #{order.id}</p>
-                              <p className="text-xs text-on-surface-variant mt-0.5">{order.items.join(", ")}</p>
+                  {ordersLoading ? (
+                    <div className="flex items-center justify-center py-12 text-on-surface-variant">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    </div>
+                  ) : orders.length === 0 ? (
+                    <div className="text-center py-12 border-2 border-dashed border-outline-variant rounded-2xl">
+                      <Package className="w-10 h-10 text-outline mx-auto mb-3" />
+                      <p className="text-sm font-bold text-on-surface">No orders yet</p>
+                      <p className="text-xs text-on-surface-variant mt-1">
+                        When you place an order it will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {orders.slice(0, 3).map((order) => {
+                        const status = order.fulfillmentStatus;
+                        const thumb = order.items?.[0]?.image;
+                        const names = (order.items ?? []).map((i) => i.name).join(", ");
+                        return (
+                          <Link
+                            key={order.orderId}
+                            href={`/orders/${order.orderId}`}
+                            className="flex items-center gap-5 p-5 bg-white border border-deep-navy/20 rounded-2xl hover:border-deep-navy transition-colors duration-150"
+                          >
+                            <div className="w-16 h-16 border border-deep-navy/20 rounded-xl overflow-hidden bg-surface-container-low shrink-0 flex items-center justify-center">
+                              {thumb ? (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img src={thumb} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <Package className="w-6 h-6 text-outline" />
+                              )}
                             </div>
-                            <span className={`text-xs font-bold uppercase tracking-widest shrink-0 ${order.statusColor}`}>
-                              {order.status}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="text-xs text-on-surface-variant">{order.date}</span>
-                            <span className="text-sm font-bold text-deep-navy">{order.total}</span>
-                          </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-on-surface-variant shrink-0" />
-                      </div>
-                    ))}
-                  </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-deep-navy">Order #{order.orderId.slice(-6)}</p>
+                                  <p className="text-xs text-on-surface-variant mt-0.5 truncate">{names || "—"}</p>
+                                </div>
+                                <span className={`text-xs font-bold uppercase tracking-widest shrink-0 ${FULFILLMENT_COLOR[status]}`}>
+                                  {FULFILLMENT_LABEL[status]}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between mt-2">
+                                <span className="text-xs text-on-surface-variant">{formatOrderDate(order.createdAt)}</span>
+                                <span className="text-sm font-bold text-deep-navy">{formatVND(order.amount)}</span>
+                              </div>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-on-surface-variant shrink-0" />
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Wishlist preview */}
@@ -1090,26 +1298,40 @@ export default function ProfilePage() {
                       View All ({wishlist.length})
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {wishlist.map((item) => (
-                      <div key={item.id} className="group border border-deep-navy/20 rounded-2xl overflow-hidden bg-white hover:border-deep-navy transition-colors duration-150">
-                        <div className="aspect-square bg-surface-container-low p-6 relative">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
-                          <button
-                            onClick={() => setWishlist((wl) => wl.filter((w) => w.id !== item.id))}
-                            className="absolute top-3 right-3 w-7 h-7 bg-white border border-deep-navy/20 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:border-error hover:text-error"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
+                  {wishlistLoading ? (
+                    <div className="flex items-center justify-center py-12 text-on-surface-variant">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    </div>
+                  ) : wishlist.length === 0 ? (
+                    <div className="text-center py-12 border-2 border-dashed border-outline-variant rounded-2xl">
+                      <Heart className="w-10 h-10 text-outline mx-auto mb-3" />
+                      <p className="text-sm font-bold text-on-surface">Your wishlist is empty</p>
+                      <p className="text-xs text-on-surface-variant mt-1">
+                        Tap the heart on a product to save it here.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {wishlist.slice(0, 4).map((item) => (
+                        <div key={item.id} className="group border border-deep-navy/20 rounded-2xl overflow-hidden bg-white hover:border-deep-navy transition-colors duration-150">
+                          <Link href={`/products/${item.id}`} className="block aspect-square bg-surface-container-low p-6 relative">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
+                            <button
+                              onClick={(e) => { e.preventDefault(); removeWish(item.id); }}
+                              className="absolute top-3 right-3 w-7 h-7 bg-white border border-deep-navy/20 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:border-error hover:text-error"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </Link>
+                          <div className="p-4">
+                            <p className="text-xs font-bold text-deep-navy truncate">{item.name}</p>
+                            <p className="text-xs text-on-surface-variant mt-0.5">{formatVND(item.price)}</p>
+                          </div>
                         </div>
-                        <div className="p-4">
-                          <p className="text-xs font-bold text-deep-navy">{item.name}</p>
-                          <p className="text-xs text-on-surface-variant mt-0.5">{item.price}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -1145,39 +1367,82 @@ export default function ProfilePage() {
                 transition={{ duration: 0.3, ease: EASE }}
               >
                 <h2 className="text-headline-md text-deep-navy mb-6">Wishlist</h2>
-                <AnimatePresence>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-                    {wishlist.map((item) => (
-                      <motion.div
-                        key={item.id}
-                        layout
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ duration: 0.25 }}
-                        className="group border border-deep-navy/20 rounded-2xl overflow-hidden bg-white hover:border-deep-navy transition-colors duration-150"
-                      >
-                        <div className="aspect-square bg-surface-container-low p-6 relative">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
-                          <button
-                            onClick={() => setWishlist((wl) => wl.filter((w) => w.id !== item.id))}
-                            className="absolute top-3 right-3 w-7 h-7 bg-white border border-deep-navy/20 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:border-error hover:text-error"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <div className="p-4 space-y-3">
-                          <div>
-                            <p className="text-sm font-bold text-deep-navy">{item.name}</p>
-                            <p className="text-xs text-on-surface-variant mt-0.5">{item.price}</p>
-                          </div>
-                          <button className="w-full py-2 border-t border-deep-navy/10 text-xs font-bold uppercase hover:bg-deep-navy hover:text-primary-container transition-all duration-200 active:scale-[0.97]">
-                            Add to Cart
-                          </button>
-                        </div>
-                      </motion.div>
-                    ))}
+                {wishlistLoading ? (
+                  <div className="flex items-center justify-center py-20 text-on-surface-variant">
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   </div>
-                </AnimatePresence>
+                ) : wishlist.length === 0 ? (
+                  <div className="text-center py-16 border-2 border-dashed border-outline-variant rounded-2xl">
+                    <Heart className="w-10 h-10 text-outline mx-auto mb-3" />
+                    <p className="text-sm font-bold text-on-surface">Your wishlist is empty</p>
+                    <p className="text-xs text-on-surface-variant mt-1">
+                      Tap the heart on a product to save it here.
+                    </p>
+                  </div>
+                ) : (
+                  <AnimatePresence>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+                      {wishlist.map((item) => (
+                        <motion.div
+                          key={item.id}
+                          layout
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          transition={{ duration: 0.25 }}
+                          className="group border border-deep-navy/20 rounded-2xl overflow-hidden bg-white hover:border-deep-navy transition-colors duration-150"
+                        >
+                          <Link href={`/products/${item.id}`} className="block aspect-square bg-surface-container-low p-6 relative">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
+                            <button
+                              onClick={(e) => { e.preventDefault(); removeWish(item.id); }}
+                              className="absolute top-3 right-3 w-7 h-7 bg-white border border-deep-navy/20 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:border-error hover:text-error"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </Link>
+                          <div className="p-4 space-y-3">
+                            <div>
+                              <p className="text-sm font-bold text-deep-navy truncate">{item.name}</p>
+                              <p className="text-xs text-on-surface-variant mt-0.5">{formatVND(item.price)}</p>
+                            </div>
+                            <Link
+                              href={`/products/${item.id}`}
+                              className="block text-center w-full py-2 border-t border-deep-navy/10 text-xs font-bold uppercase hover:bg-deep-navy hover:text-primary-container transition-all duration-200 active:scale-[0.97]"
+                            >
+                              View Product
+                            </Link>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </AnimatePresence>
+                )}
+              </motion.div>
+            )}
+
+            {activeTab === "rewards" && (
+              <motion.div
+                key="rewards"
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: EASE }}
+              >
+                <div className="mb-8">
+                  <div className="flex items-center gap-2.5 mb-1">
+                    <div className="h-px w-6 bg-primary-container flex-shrink-0" />
+                    <p className="text-label-caps text-primary">Loyalty</p>
+                  </div>
+                  <h2 className="text-headline-md text-deep-navy">Rewards</h2>
+                  <p className="text-sm text-on-surface-variant mt-1">
+                    Earn points on every purchase and redeem them for wallet credit.
+                  </p>
+                </div>
+                <RewardsTab
+                  summary={points}
+                  loading={pointsLoading}
+                  onRedeem={handleRedeemPoints}
+                />
               </motion.div>
             )}
 
@@ -1471,106 +1736,6 @@ export default function ProfilePage() {
                   {editingAddrId ? "Save Changes" : "Add Address"}
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Wallet Top-Up Modal ── */}
-      <AnimatePresence>
-        {showTopUp && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
-            onClick={() => !topUpLoading && setShowTopUp(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0, transition: { duration: 0.25, ease: EASE } }}
-              exit={{ opacity: 0, scale: 0.95, y: 8, transition: { duration: 0.18 } }}
-              className="bg-white border-2 border-deep-navy rounded-2xl w-full max-w-md overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="bg-deep-navy px-6 py-5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-primary-container/15 border border-primary-container/40 rounded-xl flex items-center justify-center">
-                    <Wallet className="w-4 h-4 text-primary-container" />
-                  </div>
-                  <div>
-                    <p className="text-label-caps tracking-widest text-primary-container/70">Wallet</p>
-                    <h2 className="text-lg font-bold text-white leading-tight">Top Up Balance</h2>
-                  </div>
-                </div>
-                <button
-                  onClick={() => !topUpLoading && setShowTopUp(false)}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white/60 hover:text-white border border-white/20 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="h-0.5 bg-primary-container" />
-
-              <form onSubmit={handleTopUp} className="px-6 py-6 space-y-5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-on-surface-variant">Current balance</span>
-                  <span className="font-bold text-deep-navy">{formatVND(wallet?.balance ?? 0)}</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  {TOPUP_PRESETS.map((amt) => (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => { setTopUpAmount(String(amt)); setTopUpError(""); }}
-                      className={`h-11 rounded-xl border-2 text-sm font-bold transition-colors ${
-                        Number(topUpAmount) === amt
-                          ? "border-primary-container bg-primary-container/10 text-deep-navy"
-                          : "border-deep-navy/20 text-on-surface-variant hover:border-deep-navy"
-                      }`}
-                    >
-                      {formatVND(amt)}
-                    </button>
-                  ))}
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2">
-                    Custom Amount (₫)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={topUpAmount}
-                    onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(""); }}
-                    placeholder="Enter amount"
-                    className="block w-full h-12 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface placeholder:text-outline focus:border-primary-container outline-none transition-colors"
-                  />
-                </div>
-
-                {topUpError && <p className="text-xs font-medium text-error">{topUpError}</p>}
-
-                <div className="flex gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowTopUp(false)}
-                    disabled={topUpLoading}
-                    className="flex-1 h-11 border-2 border-deep-navy text-deep-navy text-label-caps font-bold rounded-xl hover:bg-surface-container transition-colors active:scale-[0.97] disabled:opacity-60"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={topUpLoading}
-                    className="flex-1 h-11 bg-primary-container text-deep-navy text-label-caps font-bold rounded-xl border-2 border-transparent hover:border-deep-navy transition-colors active:scale-[0.97] disabled:opacity-60"
-                  >
-                    {topUpLoading ? "Adding…" : "Add Funds"}
-                  </button>
-                </div>
-              </form>
             </motion.div>
           </motion.div>
         )}

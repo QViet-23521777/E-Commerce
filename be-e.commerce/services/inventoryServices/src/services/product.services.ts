@@ -96,9 +96,26 @@ export const createProduct = async (
 };
 
 export const getProductById = async (productId: string) => {
-  const product = await Product.findOne({ _id: productId, status: "approved" });
+  const product = await Product.findOne({
+    _id: productId,
+    status: "approved",
+  }).lean();
   if (!product) throw new Error("Product does not exists");
-  return product;
+  // Hide moderated reviews from the storefront, but stamp each surviving review
+  // with its original array position so the client can address it (report) even
+  // though the list has gaps.
+  const reviews = ((product.reviews ?? []) as ReviewEntry[])
+    .map((r, index) => ({ r, index }))
+    .filter(({ r }) => !r.hidden)
+    .map(({ r, index }) => ({
+      author: r.author,
+      rating: r.rating,
+      text: r.text,
+      date: r.date,
+      reply: r.reply ?? null,
+      index,
+    }));
+  return { ...product, reviews };
 };
 
 export const getTopByField = async (field: string, value: unknown) => {
@@ -391,6 +408,110 @@ export const findProduct = async (
   };
 };
 
+// ─── STOREFRONT SEARCH (filters + sort + pagination) ────────────────────────
+// A faceted search for the storefront /search page. Distinct from `findProduct`
+// (which powers the recommendation engine and must keep its cursor signature):
+// this one supports category/price/rating/in-stock filters, explicit sort
+// orders, and page-based pagination with a total count.
+export interface SearchOptions {
+  q?: string;
+  type?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minRating?: number;
+  inStock?: boolean;
+  onSale?: boolean;
+  sort?: "relevance" | "price_asc" | "price_desc" | "newest" | "rating" | "popular";
+  page?: number;
+  limit?: number;
+}
+
+export const searchProductsAdvanced = async (opts: SearchOptions) => {
+  const page = Math.max(1, Number(opts.page) || 1);
+  const limit = Math.min(Math.max(1, Number(opts.limit) || 12), 48);
+  const skip = (page - 1) * limit;
+
+  // Restrict to products an actual shop carries. When `inStock` is requested,
+  // narrow further to those with summed quantity > 0 (a subset of owned ids).
+  let allowedIds = await getOwnedProductIds();
+  if (opts.inStock) {
+    const rows = await Inventory.aggregate<{ _id: Types.ObjectId }>([
+      { $group: { _id: "$productId", qty: { $sum: "$quantity" } } },
+      { $match: { qty: { $gt: 0 } } },
+    ]);
+    allowedIds = rows.map((r) => r._id);
+  }
+
+  const match: Record<string, unknown> = {
+    status: "approved",
+    _id: { $in: allowedIds },
+  };
+
+  if (opts.q && opts.q.trim()) {
+    const normalizedFind = opts.q
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase();
+    match.normalize = { $regex: normalizedFind, $options: "i" };
+  }
+  if (opts.type) match.type = opts.type;
+
+  const price: Record<string, number> = {};
+  if (opts.minPrice !== undefined) price.$gte = opts.minPrice;
+  if (opts.maxPrice !== undefined) price.$lte = opts.maxPrice;
+  if (Object.keys(price).length) match.price = price;
+
+  if (opts.minRating !== undefined) match.rating = { $gte: opts.minRating };
+  if (opts.onSale) match.sale = { $gt: 0 };
+
+  const sortStage: Record<string, 1 | -1> =
+    opts.sort === "price_asc"
+      ? { price: 1, _id: 1 }
+      : opts.sort === "price_desc"
+        ? { price: -1, _id: 1 }
+        : opts.sort === "newest"
+          ? { createdAt: -1, _id: 1 }
+          : opts.sort === "rating"
+            ? { rating: -1, _id: 1 }
+            : opts.sort === "popular"
+              ? { numPurchases: -1, _id: 1 }
+              : { track: -1, _id: 1 }; // relevance (default)
+
+  const pipeline: PipelineStage[] = [
+    { $match: match },
+    {
+      $addFields: {
+        track: {
+          $add: [
+            { $multiply: ["$price", track.price] },
+            { $multiply: [{ $ifNull: ["$sale", 0] }, track.sale] },
+            { $multiply: [{ $ifNull: ["$numPurchases", 0] }, track.numPurchases] },
+            { $multiply: ["$point", track.point] },
+          ],
+        },
+      },
+    },
+    {
+      $facet: {
+        items: [{ $sort: sortStage }, { $skip: skip }, { $limit: limit }],
+        total: [{ $count: "count" }],
+      },
+    },
+  ];
+
+  const [result] = await Product.aggregate(pipeline);
+  const items = result?.items ?? [];
+  const total = result?.total?.[0]?.count ?? 0;
+
+  return {
+    items,
+    total,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  };
+};
+
 const ACTIVITY = {
   view: 1500,
   search: 200,
@@ -665,6 +786,214 @@ export const listProductsByStatus = async (
     ...p,
     sellerId: sellerByProduct.get(String(p._id)) ?? null,
   }));
+};
+
+// Recompute a product's aggregate rating from its NON-hidden reviews. Used by
+// both the add-review and moderation paths so a hidden review never skews the
+// average or the count.
+type ReviewEntry = NonNullable<PProduct["reviews"]>[number];
+const recomputeRating = (
+  reviews: ReviewEntry[],
+): { count: number; avg: number } => {
+  const visible = reviews.filter((r) => !r.hidden);
+  const count = visible.length;
+  const avg = count
+    ? visible.reduce((sum, r) => sum + (r.rating || 0), 0) / count
+    : 0;
+  return { count, avg: Math.round(avg * 10) / 10 };
+};
+
+// Append a buyer review to a product and recompute its aggregate rating. The
+// product already carries an embedded `reviews[]` (seeded data) — this is the
+// write path the storefront review form posts to.
+export const addReview = async (
+  productId: string,
+  review: { author?: string; rating?: number; text?: string },
+) => {
+  const rating = Math.max(0, Math.min(5, Math.floor(Number(review.rating) || 0)));
+  const entry = {
+    author: String(review.author || "Anonymous").trim() || "Anonymous",
+    rating,
+    text: String(review.text || "").trim(),
+    date: new Date(),
+  };
+
+  const product = await Product.findById(productId);
+  if (!product) throw new Error("Product does not exists");
+
+  product.reviews = [...(product.reviews ?? []), entry];
+  const { count, avg } = recomputeRating(product.reviews);
+  product.numReviews = count;
+  product.rating = avg;
+  await product.save();
+
+  return {
+    rating: product.rating,
+    numReviews: product.numReviews,
+    review: entry,
+  };
+};
+
+// ─── REVIEW REPLIES & MODERATION ────────────────────────────────────────────
+export interface SellerReviewRow {
+  productId: string;
+  productName: string;
+  productImage?: string;
+  index: number;
+  author: string;
+  rating: number;
+  text: string;
+  date: Date;
+  reply?: { body: string; author: string; at: Date } | null;
+  hidden: boolean;
+  reportedCount: number;
+}
+
+// A seller replies to a review on one of their own products. Ownership is
+// verified against the inventory the seller carries (seller's userId === the
+// inventory.sellerId used everywhere else).
+export const replyToReview = async (
+  productId: string,
+  index: number,
+  body: string,
+  sellerId: string,
+) => {
+  const owns = await Inventory.exists({ productId, sellerId });
+  if (!owns) throw new Error("FORBIDDEN");
+
+  const text = String(body || "").trim();
+  if (!text) throw new Error("EMPTY_REPLY");
+
+  const product = await Product.findById(productId);
+  if (!product) throw new Error("Product does not exists");
+  const reviews = product.reviews ?? [];
+  if (index < 0 || index >= reviews.length) throw new Error("REVIEW_NOT_FOUND");
+
+  reviews[index].reply = { body: text, author: "Shop", at: new Date() };
+  product.markModified("reviews");
+  await product.save();
+  return reviews[index];
+};
+
+// Admin hides/unhides a review. Unhiding also clears its report flags.
+export const moderateReview = async (
+  productId: string,
+  index: number,
+  hidden: boolean,
+) => {
+  const product = await Product.findById(productId);
+  if (!product) throw new Error("Product does not exists");
+  const reviews = product.reviews ?? [];
+  if (index < 0 || index >= reviews.length) throw new Error("REVIEW_NOT_FOUND");
+
+  reviews[index].hidden = !!hidden;
+  if (!hidden) reviews[index].reportedCount = 0;
+  const { count, avg } = recomputeRating(reviews);
+  product.numReviews = count;
+  product.rating = avg;
+  product.markModified("reviews");
+  await product.save();
+  return reviews[index];
+};
+
+// Any buyer can flag a review; this surfaces it in the admin moderation queue.
+export const reportReview = async (productId: string, index: number) => {
+  const product = await Product.findById(productId);
+  if (!product) throw new Error("Product does not exists");
+  const reviews = product.reviews ?? [];
+  if (index < 0 || index >= reviews.length) throw new Error("REVIEW_NOT_FOUND");
+
+  reviews[index].reportedCount = (reviews[index].reportedCount || 0) + 1;
+  product.markModified("reviews");
+  await product.save();
+  return { reportedCount: reviews[index].reportedCount };
+};
+
+// All reviews across the products a seller carries (incl. hidden + reported),
+// each tagged with the product + its stable index so the seller can reply.
+export const listSellerReviews = async (
+  sellerId: string,
+): Promise<SellerReviewRow[]> => {
+  const invs = await Inventory.find({ sellerId }).select("productId").lean();
+  const ids = invs.map((i) => i.productId);
+  if (ids.length === 0) return [];
+
+  const products = await Product.find({ _id: { $in: ids } })
+    .select("name imageUrl reviews")
+    .lean();
+
+  const out: SellerReviewRow[] = [];
+  for (const p of products) {
+    ((p.reviews ?? []) as ReviewEntry[]).forEach((r, index) => {
+      out.push({
+        productId: String(p._id),
+        productName: p.name,
+        productImage: p.imageUrl,
+        index,
+        author: r.author,
+        rating: r.rating,
+        text: r.text,
+        date: r.date,
+        reply: r.reply ?? null,
+        hidden: !!r.hidden,
+        reportedCount: r.reportedCount || 0,
+      });
+    });
+  }
+  out.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return out;
+};
+
+// Reported (or already-hidden) reviews across the whole catalogue — the admin
+// moderation queue.
+export const listReportedReviews = async (): Promise<SellerReviewRow[]> => {
+  const products = await Product.find({
+    $or: [{ "reviews.reportedCount": { $gt: 0 } }, { "reviews.hidden": true }],
+  })
+    .select("name imageUrl reviews")
+    .lean();
+
+  const out: SellerReviewRow[] = [];
+  for (const p of products) {
+    ((p.reviews ?? []) as ReviewEntry[]).forEach((r, index) => {
+      if ((r.reportedCount || 0) > 0 || r.hidden) {
+        out.push({
+          productId: String(p._id),
+          productName: p.name,
+          productImage: p.imageUrl,
+          index,
+          author: r.author,
+          rating: r.rating,
+          text: r.text,
+          date: r.date,
+          reply: r.reply ?? null,
+          hidden: !!r.hidden,
+          reportedCount: r.reportedCount || 0,
+        });
+      }
+    });
+  }
+  out.sort((a, b) => b.reportedCount - a.reportedCount);
+  return out;
+};
+
+// Catalog counts by moderation status — feeds the admin dashboard headline stats.
+export const getProductStats = async () => {
+  const rows = await Product.aggregate<{ _id: string; count: number }>([
+    { $group: { _id: "$status", count: { $sum: 1 } } },
+  ]);
+  const byStatus: Record<string, number> = {};
+  let total = 0;
+  for (const r of rows) {
+    byStatus[r._id] = r.count;
+    total += r.count;
+  }
+  return {
+    total,
+    pending: byStatus.pending ?? 0,
+    approved: byStatus.approved ?? 0,
+    rejected: byStatus.rejected ?? 0,
+  };
 };
 
 export const setProductStatus = async (

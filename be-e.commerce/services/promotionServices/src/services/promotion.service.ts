@@ -18,6 +18,7 @@ export type CreatePromotionInput = {
   usageLimit?: number | null;
   usageLimitPerUser?: number | null;
   productIds?: string[];
+  sellerId?: string | null;
 };
 
 export type UpdatePromotionInput = Partial<CreatePromotionInput>;
@@ -51,6 +52,7 @@ const normalizePromotion = (promotion: IPromotion) => ({
   usedCount: promotion.usedCount,
   usageLimitPerUser: promotion.usageLimitPerUser,
   productIds: promotion.productIds,
+  sellerId: promotion.sellerId ?? null,
   createdAt: promotion.createdAt,
   updatedAt: promotion.updatedAt,
 });
@@ -165,6 +167,7 @@ export const createPromotion = async (payload: CreatePromotionInput) => {
     usageLimit: payload.usageLimit ?? null,
     usageLimitPerUser: payload.usageLimitPerUser ?? null,
     productIds: payload.productIds ?? [],
+    sellerId: payload.sellerId ?? null,
   });
 
   return normalizePromotion(promotion);
@@ -174,10 +177,14 @@ export const listPromotions = async (query: {
   active?: boolean;
   limit?: number;
   page?: number;
+  // When set, only return promotions owned by this seller (shop voucher view).
+  sellerId?: string;
 }) => {
   const limit = Math.min(Math.max(query.limit ?? 20, 1), 100);
   const page = Math.max(query.page ?? 1, 1);
-  const filter = query.active === undefined ? {} : { active: query.active };
+  const filter: Record<string, unknown> = {};
+  if (query.active !== undefined) filter.active = query.active;
+  if (query.sellerId !== undefined) filter.sellerId = query.sellerId;
 
   const [items, total] = await Promise.all([
     PromotionModel.find(filter)
@@ -230,9 +237,20 @@ export const getPromotionByCode = async (code: string) => {
 export const updatePromotion = async (
   promotionId: string,
   payload: UpdatePromotionInput,
+  // When provided (seller context), the promotion must be owned by this seller.
+  requesterSellerId?: string,
 ) => {
   const existingPromotion = await PromotionModel.findById(promotionId);
   if (!existingPromotion) throw new Error("Promotion not found");
+  if (
+    requesterSellerId !== undefined &&
+    existingPromotion.sellerId !== requesterSellerId
+  ) {
+    // Don't leak existence of promotions the seller doesn't own.
+    throw new Error("Promotion not found");
+  }
+  // A seller can never reassign ownership.
+  delete (payload as { sellerId?: unknown }).sellerId;
 
   const nextDiscountType =
     payload.discountType ?? existingPromotion.discountType;
@@ -275,9 +293,20 @@ export const updatePromotion = async (
   return normalizePromotion(promotion);
 };
 
-export const deletePromotion = async (promotionId: string) => {
-  const promotion = await PromotionModel.findByIdAndDelete(promotionId);
+export const deletePromotion = async (
+  promotionId: string,
+  // When provided (seller context), the promotion must be owned by this seller.
+  requesterSellerId?: string,
+) => {
+  const promotion = await PromotionModel.findById(promotionId);
   if (!promotion) throw new Error("Promotion not found");
+  if (
+    requesterSellerId !== undefined &&
+    promotion.sellerId !== requesterSellerId
+  ) {
+    throw new Error("Promotion not found");
+  }
+  await promotion.deleteOne();
 
   return normalizePromotion(promotion);
 };

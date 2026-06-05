@@ -5,6 +5,7 @@ import {
   getQueueStatusController,
   getActivityHistoryController,
   getRecentActivitiesController,
+  getAlsoBoughtController,
   clearActivityController,
 } from "../controllers/activity.controller";
 import { validateActivity } from "../middleware/validate.middleware";
@@ -16,6 +17,7 @@ activityRoutes.post("/flush/:userId", flushActivityController);
 activityRoutes.get("/queue/:userId", getQueueStatusController);
 activityRoutes.get("/history/:userId", getActivityHistoryController);
 activityRoutes.get("/recent/:userId", getRecentActivitiesController);
+activityRoutes.get("/also-bought/:productId", getAlsoBoughtController);
 activityRoutes.delete("/queue/:userId", clearActivityController);
 
 export default activityRoutes;

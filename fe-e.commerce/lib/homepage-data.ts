@@ -2,6 +2,10 @@ import {
   Monitor,
   ShoppingBag,
   UtensilsCrossed,
+  Sofa,
+  Coffee,
+  Lamp,
+  Shirt,
   Home,
   Heart,
   Dumbbell,
@@ -12,6 +16,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProductCardProps } from "@/components/ProductCard";
+import type { Category } from "@/lib/support";
 
 export interface CategoryChipData {
   label: string;
@@ -19,17 +24,53 @@ export interface CategoryChipData {
   Icon: LucideIcon;
 }
 
+// Maps the iconName stored on a managed Category (admin picks these) to its
+// Lucide component. Unknown names fall back to a shopping bag.
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  Monitor,
+  ShoppingBag,
+  UtensilsCrossed,
+  Sofa,
+  Coffee,
+  Lamp,
+  Shirt,
+  Home,
+  Heart,
+  Dumbbell,
+  BookOpen,
+  Baby,
+  Car,
+  PawPrint,
+};
+
+export function categoryIcon(name: string): LucideIcon {
+  return CATEGORY_ICONS[name] ?? ShoppingBag;
+}
+
+// Turn managed categories into the chip shape the storefront renders. `slug` is
+// the linked product `type` (exact-match key for /top/type/:type), falling back
+// to the label.
+export function toCategoryChips(cats: Category[]): CategoryChipData[] {
+  return cats.map((c) => ({
+    label: c.label,
+    slug: c.productType || c.label,
+    Icon: categoryIcon(c.iconName),
+  }));
+}
+
+// `slug` is the exact product `type` stored in the catalogue (the same set the
+// seller create form offers in TYPE_OPTIONS). The storefront filters/chips pass
+// it straight to `/api/products/top/type/:type`, which does an exact match — so
+// these MUST stay in sync with the canonical seller taxonomy, not an invented
+// retail one. Ordered populated-first.
 export const BROWSE_CATEGORIES: CategoryChipData[] = [
-  { label: "Electronics", slug: "electronics", Icon: Monitor },
-  { label: "Fashion", slug: "fashion", Icon: ShoppingBag },
-  { label: "Food & Grocery", slug: "food-grocery", Icon: UtensilsCrossed },
-  { label: "Home & Living", slug: "home-living", Icon: Home },
-  { label: "Health & Beauty", slug: "health-beauty", Icon: Heart },
-  { label: "Sports", slug: "sports", Icon: Dumbbell },
-  { label: "Books", slug: "books", Icon: BookOpen },
-  { label: "Toys & Baby", slug: "toys-baby", Icon: Baby },
-  { label: "Automotive", slug: "automotive", Icon: Car },
-  { label: "Pet Supplies", slug: "pet-supplies", Icon: PawPrint },
+  { label: "Electronics", slug: "Electronics", Icon: Monitor },
+  { label: "Fashion", slug: "Fashion", Icon: ShoppingBag },
+  { label: "Kitchenware", slug: "Kitchenware", Icon: UtensilsCrossed },
+  { label: "Decor", slug: "Decor", Icon: Sofa },
+  { label: "Drinkware", slug: "Drinkware", Icon: Coffee },
+  { label: "Lighting", slug: "Lighting", Icon: Lamp },
+  { label: "Textiles", slug: "Textiles", Icon: Shirt },
 ];
 
 export const ELECTRONICS_PRODUCTS: ProductCardProps[] = [

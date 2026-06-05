@@ -9,7 +9,9 @@ import { Request } from "../utils/proxy";
 const router = new Hono();
 const BASE = process.env.PROMOTION_SERVICE_URL;
 
-router.get("/", authenticate, authorize("admin"), (c) =>
+// Shared list: admins get all promotions, sellers get only their own vouchers
+// (scoped by the promotion service from the forwarded user identity).
+router.get("/", authenticate, (c) =>
   Request(c, `${BASE}/api/promotions`, "GET"),
 );
 
@@ -30,7 +32,9 @@ router.post("/redeem", authenticate, (c) =>
   Request(c, `${BASE}/api/promotions/redeem`, "POST"),
 );
 
-router.post("/", authenticate, authorize("admin"), (c) =>
+// Create / update / delete are shared by admins (global) and sellers (shop
+// vouchers). The promotion service scopes non-admins to their own promotions.
+router.post("/", authenticate, (c) =>
   Request(c, `${BASE}/api/promotions`, "POST"),
 );
 
@@ -39,12 +43,12 @@ router.get("/:promotionId", authenticate, authorize("admin"), (c) => {
   return Request(c, `${BASE}/api/promotions/${promotionId}`, "GET");
 });
 
-router.patch("/:promotionId", authenticate, authorize("admin"), (c) => {
+router.patch("/:promotionId", authenticate, (c) => {
   const promotionId = c.req.param("promotionId");
   return Request(c, `${BASE}/api/promotions/${promotionId}`, "PATCH");
 });
 
-router.delete("/:promotionId", authenticate, authorize("admin"), (c) => {
+router.delete("/:promotionId", authenticate, (c) => {
   const promotionId = c.req.param("promotionId");
   return Request(c, `${BASE}/api/promotions/${promotionId}`, "DELETE");
 });

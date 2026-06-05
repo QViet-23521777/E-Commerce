@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -10,81 +9,152 @@ import {
   CheckCircle2,
   Ban,
   Eye,
-  ChevronRight,
   Mail,
   Calendar,
-  ShoppingBag,
-  Package,
-  Star,
+  BadgeCheck,
+  KeyRound,
+  UserCog,
+  Loader2,
+  Wallet,
+  Plus,
 } from "lucide-react";
+import {
+  fetchAccounts,
+  setAccountActive,
+  type Account,
+  type AccountRole,
+} from "@/lib/accounts";
+import { adminCreditWallet } from "@/lib/wallet";
+import { formatVND } from "@/lib/products";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-type Role = "buyer" | "seller" | "admin";
-type Status = "Active" | "Suspended";
-
-interface Account {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  status: Status;
-  joined: string;
-  orders: number;
-  rating: number;
-  totalSpent: string;
-  avatar: string;
-}
-
-const ACCOUNTS: Account[] = [
-  { id: "USR-001", name: "Emma Strand", email: "emma.s@email.com", role: "buyer", status: "Active", joined: "Mar 12, 2024", orders: 24, rating: 0, totalSpent: "$1,240", avatar: "ES" },
-  { id: "USR-002", name: "Nordic Living Co.", email: "nordic@seller.com", role: "seller", status: "Active", joined: "Jan 5, 2024", orders: 0, rating: 4.9, totalSpent: "$0", avatar: "NL" },
-  { id: "USR-003", name: "Liam Thorsen", email: "l.thorsen@email.com", role: "buyer", status: "Active", joined: "Apr 22, 2024", orders: 8, rating: 0, totalSpent: "$389", avatar: "LT" },
-  { id: "USR-004", name: "GlowUp Beauty", email: "glowup@seller.com", role: "seller", status: "Active", joined: "Feb 14, 2024", orders: 0, rating: 4.7, totalSpent: "$0", avatar: "GB" },
-  { id: "USR-005", name: "Priya Nair", email: "priya.n@email.com", role: "buyer", status: "Active", joined: "May 3, 2024", orders: 3, rating: 0, totalSpent: "$156", avatar: "PN" },
-  { id: "USR-006", name: "TechVault Store", email: "techvault@seller.com", role: "seller", status: "Suspended", joined: "Nov 28, 2023", orders: 0, rating: 3.2, totalSpent: "$0", avatar: "TV" },
-  { id: "USR-007", name: "Carlos Mendez", email: "carlos.m@email.com", role: "buyer", status: "Active", joined: "Jun 17, 2024", orders: 12, rating: 0, totalSpent: "$720", avatar: "CM" },
-  { id: "USR-008", name: "Sophie Berg", email: "s.berg@email.com", role: "buyer", status: "Active", joined: "Jul 9, 2024", orders: 5, rating: 0, totalSpent: "$294", avatar: "SB" },
-  { id: "USR-009", name: "ZenGear Co.", email: "zen@seller.com", role: "seller", status: "Active", joined: "Mar 1, 2024", orders: 0, rating: 4.8, totalSpent: "$0", avatar: "ZG" },
-  { id: "USR-010", name: "Admin User", email: "admin@shopin.com", role: "admin", status: "Active", joined: "Jan 1, 2024", orders: 0, rating: 0, totalSpent: "$0", avatar: "AU" },
-  { id: "USR-011", name: "Ava Peterson", email: "ava.p@email.com", role: "buyer", status: "Active", joined: "Aug 14, 2024", orders: 7, rating: 0, totalSpent: "$512", avatar: "AP" },
-  { id: "USR-012", name: "Hearth & Home", email: "hearth@seller.com", role: "seller", status: "Active", joined: "Dec 10, 2023", orders: 0, rating: 4.6, totalSpent: "$0", avatar: "HH" },
-  { id: "USR-013", name: "Noah Kim", email: "noah.k@email.com", role: "buyer", status: "Suspended", joined: "Feb 20, 2024", orders: 2, rating: 0, totalSpent: "$89", avatar: "NK" },
-  { id: "USR-014", name: "BrightMinds Shop", email: "bright@seller.com", role: "seller", status: "Active", joined: "Sep 5, 2024", orders: 0, rating: 4.5, totalSpent: "$0", avatar: "BM" },
-  { id: "USR-015", name: "Amara Osei", email: "amara.o@email.com", role: "buyer", status: "Active", joined: "Oct 1, 2024", orders: 1, rating: 0, totalSpent: "$45", avatar: "AO" },
-];
-
-const ROLE_META: Record<Role, string> = {
-  buyer: "bg-secondary/10 text-secondary border-secondary/30",
+const ROLE_META: Record<AccountRole, string> = {
+  user: "bg-secondary/10 text-secondary border-secondary/30",
   seller: "bg-primary/10 text-primary border-primary/20",
   admin: "bg-red-50 text-red-500 border-red-200",
+  superadmin: "bg-red-50 text-red-500 border-red-200",
+};
+
+const ROLE_LABEL: Record<AccountRole, string> = {
+  user: "buyer",
+  seller: "seller",
+  admin: "admin",
+  superadmin: "superadmin",
 };
 
 type FilterTab = "All" | "Buyers" | "Sellers" | "Admins";
 const TABS: FilterTab[] = ["All", "Buyers", "Sellers", "Admins"];
 
-export default function AccountsPage() {
-  const [activeTab, setActiveTab] = useState<FilterTab>("All");
-  const [selected, setSelected] = useState<Account | null>(null);
-  const [suspended, setSuspended] = useState<Set<string>>(new Set(["USR-006", "USR-013"]));
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
-  const filtered = ACCOUNTS.filter((a) => {
-    if (activeTab === "Buyers") return a.role === "buyer";
-    if (activeTab === "Sellers") return a.role === "seller";
-    if (activeTab === "Admins") return a.role === "admin";
+function formatJoined(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+const isAdminRole = (r: AccountRole) => r === "admin" || r === "superadmin";
+
+export default function AccountsPage() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [activeTab, setActiveTab] = useState<FilterTab>("All");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Account | null>(null);
+  const [acting, setActing] = useState(false);
+
+  // ── Wallet top-up (for the selected account) ──
+  const [topUpAmount, setTopUpAmount] = useState("");
+  const [topUpLoading, setTopUpLoading] = useState(false);
+  const [topUpError, setTopUpError] = useState("");
+  const [topUpSuccess, setTopUpSuccess] = useState("");
+
+  // Reset the top-up form whenever a different account is opened.
+  useEffect(() => {
+    setTopUpAmount("");
+    setTopUpError("");
+    setTopUpSuccess("");
+  }, [selected?.id]);
+
+  async function handleTopUp() {
+    if (!selected) return;
+    setTopUpError("");
+    setTopUpSuccess("");
+    const amount = Math.floor(Number(topUpAmount));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setTopUpError("Enter a positive amount.");
+      return;
+    }
+    setTopUpLoading(true);
+    try {
+      const updated = await adminCreditWallet(selected.id, amount);
+      setTopUpSuccess(`Added ${formatVND(amount)}. New balance: ${formatVND(updated.balance)}.`);
+      setTopUpAmount("");
+    } catch (err: unknown) {
+      setTopUpError((err as { message?: string })?.message ?? "Top-up failed.");
+    } finally {
+      setTopUpLoading(false);
+    }
+  }
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      setAccounts(await fetchAccounts());
+    } catch (err: unknown) {
+      setLoadError(
+        (err as { message?: string })?.message ?? "Couldn't load accounts.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const filtered = accounts.filter((a) => {
+    if (activeTab === "Buyers" && a.role !== "user") return false;
+    if (activeTab === "Sellers" && a.role !== "seller") return false;
+    if (activeTab === "Admins" && !isAdminRole(a.role)) return false;
+    const q = query.trim().toLowerCase();
+    if (q && !a.name.toLowerCase().includes(q) && !a.email.toLowerCase().includes(q))
+      return false;
     return true;
   });
 
-  function toggleSuspend(id: string) {
-    setSuspended((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  async function toggleSuspend(account: Account) {
+    setActing(true);
+    try {
+      const nextActive = !account.isActive;
+      await setAccountActive(account.id, nextActive);
+      setAccounts((prev) =>
+        prev.map((a) => (a.id === account.id ? { ...a, isActive: nextActive } : a)),
+      );
+      setSelected((prev) =>
+        prev && prev.id === account.id ? { ...prev, isActive: nextActive } : prev,
+      );
+    } catch (err: unknown) {
+      setLoadError(
+        (err as { message?: string })?.message ?? "Couldn't update the account.",
+      );
+    } finally {
+      setActing(false);
+    }
   }
-
-  const selectedStatus = selected ? (suspended.has(selected.id) ? "Suspended" : "Active") : null;
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto w-full">
@@ -119,11 +189,20 @@ export default function AccountsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-outline" />
           <input
             type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search accounts…"
             className="h-9 pl-9 pr-4 border-2 border-outline-variant rounded-xl text-sm bg-white focus:border-primary-container outline-none transition-colors w-56"
           />
         </div>
       </div>
+
+      {loadError && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border-2 border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">
+          <span>{loadError}</span>
+          <button onClick={load} className="font-bold underline hover:no-underline">Retry</button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white border-2 border-deep-navy rounded-xl overflow-hidden">
@@ -139,54 +218,75 @@ export default function AccountsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant">
-              {filtered.map((account) => {
-                const isSuspended = suspended.has(account.id);
-                return (
-                  <tr key={account.id} className="hover:bg-surface-container-low transition-colors">
-                    <td className="px-6 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-surface-container rounded-full flex items-center justify-center text-[10px] font-bold text-deep-navy shrink-0">
-                          {account.avatar}
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-16 text-center text-on-surface-variant">
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                    Loading accounts…
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-16 text-center text-sm text-on-surface-variant">
+                    No accounts match this view.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((account) => {
+                  const isSuspended = !account.isActive;
+                  return (
+                    <tr key={account.id} className="hover:bg-surface-container-low transition-colors">
+                      <td className="px-6 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-surface-container rounded-full flex items-center justify-center text-[10px] font-bold text-deep-navy shrink-0">
+                            {initials(account.name)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-deep-navy capitalize">{account.name}</p>
+                            <p className="text-[10px] text-on-surface-variant font-mono">{account.id.slice(-8)}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-semibold text-deep-navy">{account.name}</p>
-                          <p className="text-[10px] text-on-surface-variant font-mono">{account.id}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 text-sm text-on-surface-variant">{account.email}</td>
-                    <td className="px-5 py-3.5">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize ${ROLE_META[account.role]}`}>
-                        {account.role}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        isSuspended
-                          ? "bg-red-50 text-red-500 border-red-200"
-                          : "bg-primary/10 text-primary border-primary/20"
-                      }`}>
-                        {isSuspended ? <Ban className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
-                        {isSuspended ? "Suspended" : "Active"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-sm text-on-surface-variant">{account.joined}</td>
-                    <td className="pr-5 py-3.5">
-                      <button
-                        onClick={() => setSelected(account)}
-                        className="flex items-center gap-1 text-xs font-bold text-primary hover:text-deep-navy transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-on-surface-variant">{account.email}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize ${ROLE_META[account.role]}`}>
+                          {ROLE_LABEL[account.role]}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          isSuspended
+                            ? "bg-red-50 text-red-500 border-red-200"
+                            : "bg-primary/10 text-primary border-primary/20"
+                        }`}>
+                          {isSuspended ? <Ban className="w-2.5 h-2.5" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
+                          {isSuspended ? "Suspended" : "Active"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-on-surface-variant">{formatJoined(account.createdAt)}</td>
+                      <td className="pr-5 py-3.5">
+                        <button
+                          onClick={() => setSelected(account)}
+                          className="flex items-center gap-1 text-xs font-bold text-primary hover:text-deep-navy transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {!loading && (
+        <p className="mt-3 text-xs text-on-surface-variant">
+          Showing {filtered.length} of {accounts.length} account{accounts.length === 1 ? "" : "s"}.
+        </p>
+      )}
 
       {/* Detail panel */}
       <AnimatePresence>
@@ -222,20 +322,20 @@ export default function AccountsPage() {
                 {/* Identity */}
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 bg-surface-container rounded-2xl flex items-center justify-center text-lg font-bold text-deep-navy">
-                    {selected.avatar}
+                    {initials(selected.name)}
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-deep-navy">{selected.name}</h3>
+                    <h3 className="text-lg font-bold text-deep-navy capitalize">{selected.name}</h3>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize ${ROLE_META[selected.role]}`}>
-                        {selected.role}
+                        {ROLE_LABEL[selected.role]}
                       </span>
                       <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        selectedStatus === "Suspended"
+                        !selected.isActive
                           ? "bg-red-50 text-red-500 border-red-200"
                           : "bg-primary/10 text-primary border-primary/20"
                       }`}>
-                        {selectedStatus}
+                        {selected.isActive ? "Active" : "Suspended"}
                       </span>
                     </div>
                   </div>
@@ -250,7 +350,7 @@ export default function AccountsPage() {
                   </div>
                   <div className="flex items-center gap-2.5 text-sm text-on-surface">
                     <Calendar className="w-3.5 h-3.5 text-outline shrink-0" />
-                    Joined {selected.joined}
+                    Joined {formatJoined(selected.createdAt)}
                   </div>
                   <div className="flex items-center gap-2.5 text-sm text-on-surface font-mono text-xs">
                     <ShieldCheck className="w-3.5 h-3.5 text-outline shrink-0" />
@@ -258,48 +358,76 @@ export default function AccountsPage() {
                   </div>
                 </div>
 
-                {/* Stats */}
+                {/* Account flags (real data) */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-white border-2 border-deep-navy rounded-xl p-3 text-center">
-                    <ShoppingBag className="w-4 h-4 text-deep-navy mx-auto mb-1.5" />
-                    <p className="text-lg font-bold text-deep-navy">{selected.orders}</p>
-                    <p className="text-[10px] text-on-surface-variant">Orders</p>
+                    <BadgeCheck className="w-4 h-4 text-deep-navy mx-auto mb-1.5" />
+                    <p className="text-sm font-bold text-deep-navy">{selected.isVerified ? "Yes" : "No"}</p>
+                    <p className="text-[10px] text-on-surface-variant">Verified</p>
                   </div>
                   <div className="bg-white border-2 border-deep-navy rounded-xl p-3 text-center">
-                    <Package className="w-4 h-4 text-deep-navy mx-auto mb-1.5" />
-                    <p className="text-lg font-bold text-deep-navy">{selected.totalSpent}</p>
-                    <p className="text-[10px] text-on-surface-variant">Spent</p>
+                    <KeyRound className="w-4 h-4 text-deep-navy mx-auto mb-1.5" />
+                    <p className="text-sm font-bold text-deep-navy">{selected.twoFactorEnabled ? "On" : "Off"}</p>
+                    <p className="text-[10px] text-on-surface-variant">2FA</p>
                   </div>
                   <div className="bg-white border-2 border-deep-navy rounded-xl p-3 text-center">
-                    <Star className="w-4 h-4 text-deep-navy mx-auto mb-1.5" />
-                    <p className="text-lg font-bold text-deep-navy">{selected.rating || "—"}</p>
-                    <p className="text-[10px] text-on-surface-variant">Rating</p>
+                    <UserCog className="w-4 h-4 text-deep-navy mx-auto mb-1.5" />
+                    <p className="text-sm font-bold text-deep-navy capitalize">{ROLE_LABEL[selected.role]}</p>
+                    <p className="text-[10px] text-on-surface-variant">Role</p>
                   </div>
                 </div>
 
                 {/* Actions */}
-                {selected.role !== "admin" && (
+                {!isAdminRole(selected.role) && (
                   <div className="pt-2 space-y-2">
                     <p className="text-label-caps text-on-surface-variant mb-3">Actions</p>
                     <button
-                      onClick={() => toggleSuspend(selected.id)}
-                      className={`w-full flex items-center justify-center gap-2 h-10 rounded-xl text-sm font-bold border-2 transition-all duration-150 ${
-                        suspended.has(selected.id)
+                      onClick={() => toggleSuspend(selected)}
+                      disabled={acting}
+                      className={`w-full flex items-center justify-center gap-2 h-10 rounded-xl text-sm font-bold border-2 transition-all duration-150 disabled:opacity-60 ${
+                        !selected.isActive
                           ? "bg-primary-container text-deep-navy border-primary-container hover:border-deep-navy"
                           : "bg-white text-red-500 border-red-200 hover:bg-red-50 hover:border-red-400"
                       }`}
                     >
-                      {suspended.has(selected.id) ? (
+                      {acting ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : !selected.isActive ? (
                         <><CheckCircle2 className="w-4 h-4" /> Activate Account</>
                       ) : (
                         <><Ban className="w-4 h-4" /> Suspend Account</>
                       )}
                     </button>
-                    <Link href="/admin/accounts">
-                      <button className="w-full flex items-center justify-center gap-2 h-10 rounded-xl text-sm font-bold bg-white text-deep-navy border-2 border-deep-navy hover:bg-surface-container-low transition-colors">
-                        View Full Profile <ChevronRight className="w-4 h-4" />
+                  </div>
+                )}
+
+                {/* Wallet top-up — admins credit a user's wallet (buyers can no
+                    longer self top-up). Available for non-admin accounts. */}
+                {!isAdminRole(selected.role) && (
+                  <div className="pt-4 border-t-2 border-surface-container space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="w-3.5 h-3.5 text-deep-navy" />
+                      <p className="text-label-caps text-on-surface-variant">Wallet Top-Up</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        value={topUpAmount}
+                        onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(""); setTopUpSuccess(""); }}
+                        placeholder="Amount (₫)"
+                        className="flex-1 h-10 px-3 border-2 border-outline-variant rounded-xl text-sm bg-white focus:border-primary-container outline-none transition-colors"
+                      />
+                      <button
+                        onClick={handleTopUp}
+                        disabled={topUpLoading}
+                        className="flex items-center justify-center gap-1.5 h-10 px-4 rounded-xl text-sm font-bold border-2 border-deep-navy bg-deep-navy text-white hover:bg-deep-navy/90 transition-all duration-150 disabled:opacity-60 shrink-0"
+                      >
+                        {topUpLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" /> Add</>}
                       </button>
-                    </Link>
+                    </div>
+                    {topUpError && <p className="text-xs font-medium text-red-500">{topUpError}</p>}
+                    {topUpSuccess && <p className="text-xs font-medium text-primary">{topUpSuccess}</p>}
                   </div>
                 )}
               </div>

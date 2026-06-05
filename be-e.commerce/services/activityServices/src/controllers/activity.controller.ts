@@ -5,6 +5,7 @@ import {
   getQueueStatus,
   getActivityHistory,
   getRecentActivities,
+  getAlsoBought,
   clearActivity,
 } from "../services/activity.services";
 
@@ -65,6 +66,20 @@ export const getRecentActivitiesController = async (c: Context) => {
   } catch (error) {
     return c.json(
       { success: false, message: "Lỗi khi lấy recent activities" },
+      500,
+    );
+  }
+};
+
+export const getAlsoBoughtController = async (c: Context) => {
+  try {
+    const productId = c.req.param("productId") || "";
+    const limit = Number(c.req.query("limit")) || 8;
+    const productIds = await getAlsoBought(productId, limit);
+    return c.json({ success: true, data: productIds });
+  } catch (error) {
+    return c.json(
+      { success: false, message: "Lỗi khi lấy sản phẩm mua kèm" },
       500,
     );
   }

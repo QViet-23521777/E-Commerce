@@ -1,17 +1,33 @@
 "use client";
 
-import { SlidersHorizontal, Grid3X3, List, X, Heart, ChevronDown, Search } from "lucide-react";
+import { SlidersHorizontal, Grid3X3, List, X, Heart, ChevronDown, Search, Star } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { searchProducts, fetchTopByType, fetchTopSale, formatVND, type UIProduct } from "@/lib/products";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { searchProductsAdvanced, formatVND, fetchShopByProduct, type UIProduct } from "@/lib/products";
 import { addToCart } from "@/lib/cart";
 import { BROWSE_CATEGORIES } from "@/lib/homepage-data";
 
-const MATERIALS = ["On Sale", "Bestseller", "High Reward Points"];
-
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
+
+const SORT_OPTIONS: { value: NonNullable<Parameters<typeof searchProductsAdvanced>[0]["sort"]>; label: string }[] = [
+  { value: "relevance", label: "Relevance" },
+  { value: "price_asc", label: "Price: Low to High" },
+  { value: "price_desc", label: "Price: High to Low" },
+  { value: "newest", label: "Newest" },
+  { value: "rating", label: "Top Rated" },
+  { value: "popular", label: "Best Selling" },
+];
+
+const RATING_OPTIONS = [
+  { value: 0, label: "Any rating" },
+  { value: 4, label: "4 stars & up" },
+  { value: 3, label: "3 stars & up" },
+  { value: 2, label: "2 stars & up" },
+];
+
+const PAGE_SIZE = 12;
 
 const staggerGrid = {
   hidden: {},
@@ -27,60 +43,52 @@ function SearchInner() {
   const params = useSearchParams();
   const initialQ = params.get("q") ?? "";
   const initialCategory = params.get("category") ?? "";
-  const initialSale = params.get("sale");
+  const initialSale = params.get("sale") === "1" || params.get("sale") === "true";
 
+  // Committed filter state (drives the server query).
   const [query, setQuery] = useState(initialQ);
   const [inputValue, setInputValue] = useState(initialQ);
+  const [category, setCategory] = useState<string>(initialCategory);
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [minRating, setMinRating] = useState(0);
+  const [inStock, setInStock] = useState(false);
+  const [onSale, setOnSale] = useState(initialSale);
+  const [sort, setSort] = useState<NonNullable<Parameters<typeof searchProductsAdvanced>[0]["sort"]>>("relevance");
+
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [activeCategories, setActiveCategories] = useState<string[]>(
-    initialCategory ? [initialCategory] : [],
-  );
-  const [activeFlags, setActiveFlags] = useState<string[]>(
-    initialSale ? ["On Sale"] : [],
-  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+
   const [products, setProducts] = useState<UIProduct[]>([]);
-  const [cursor, setCursor] = useState<{ lastTrack?: number; lastId?: string } | null>(null);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadMoreBusy, setLoadMoreBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const runQuery = useCallback(
-    async (q: string, append = false, c: { lastTrack?: number; lastId?: string } | null = null) => {
+  const load = useCallback(
+    async (pageToLoad: number, append: boolean) => {
       setError(null);
       append ? setLoadMoreBusy(true) : setLoading(true);
       try {
-        if (q.trim().length >= 2) {
-          const res = await searchProducts(q.trim(), 12, c);
-          setProducts((prev) => (append ? [...prev, ...res.items] : res.items));
-          setCursor(res.nextCursor);
-        } else if (activeCategories.length > 0) {
-          const lists = await Promise.all(
-            activeCategories.map((cat) => fetchTopByType(cat, 12)),
-          );
-          const merged: UIProduct[] = [];
-          const seen = new Set<string>();
-          for (const list of lists) {
-            for (const p of list) {
-              if (!seen.has(p.id)) {
-                seen.add(p.id);
-                merged.push(p);
-              }
-            }
-          }
-          setProducts(merged);
-          setCursor(null);
-        } else if (activeFlags.includes("On Sale")) {
-          // No query/category but the "On Sale" highlight is on (e.g. arriving
-          // from the Flash Deals "See All" link, /search?sale=1) — show the
-          // best current discounts.
-          const items = await fetchTopSale(24);
-          setProducts(items);
-          setCursor(null);
-        } else {
-          setProducts([]);
-          setCursor(null);
-        }
+        const res = await searchProductsAdvanced({
+          q: query.trim().length >= 2 ? query.trim() : undefined,
+          type: category || undefined,
+          minPrice: minPrice ? Number(minPrice) : undefined,
+          maxPrice: maxPrice ? Number(maxPrice) : undefined,
+          minRating: minRating || undefined,
+          inStock: inStock || undefined,
+          onSale: onSale || undefined,
+          sort,
+          page: pageToLoad,
+          limit: PAGE_SIZE,
+        });
+        setTotal(res.total);
+        setTotalPages(res.totalPages);
+        setPage(res.page);
+        setProducts((prev) => (append ? [...prev, ...res.items] : res.items));
       } catch (err) {
         const e = err as { message?: string };
         setError(e?.message ?? "Search failed");
@@ -89,38 +97,36 @@ function SearchInner() {
         append ? setLoadMoreBusy(false) : setLoading(false);
       }
     },
-    [activeCategories, activeFlags],
+    [query, category, minPrice, maxPrice, minRating, inStock, onSale, sort],
   );
 
+  // Re-run from page 1 whenever any filter/sort/query changes (debounced so
+  // typing a price doesn't fire a request per keystroke).
   useEffect(() => {
-    runQuery(query, false, null);
-  }, [query, runQuery]);
+    const t = setTimeout(() => load(1, false), 300);
+    return () => clearTimeout(t);
+  }, [load]);
 
-  const filteredProducts = useMemo(() => {
-    let list = products;
-    if (activeCategories.length > 0 && query.trim().length >= 2) {
-      list = list.filter((p) => p.type && activeCategories.includes(p.type));
-    }
-    if (activeFlags.includes("On Sale"))
-      list = list.filter((p) => (p.salePercent ?? 0) > 0);
-    if (activeFlags.includes("Bestseller"))
-      list = list.filter((p) => (p.numPurchases ?? 0) >= 1000);
-    if (activeFlags.includes("High Reward Points"))
-      list = list.filter((p) => (p.point ?? 0) >= 20);
-    return list;
-  }, [products, activeCategories, activeFlags, query]);
-
-  const toggleFilter = (
-    val: string,
-    active: string[],
-    set: React.Dispatch<React.SetStateAction<string[]>>,
-  ) => set(active.includes(val) ? active.filter((v) => v !== val) : [...active, val]);
+  const loadMore = () => {
+    if (page >= totalPages || loadMoreBusy) return;
+    load(page + 1, true);
+  };
 
   const clearAll = () => {
-    setActiveCategories([]);
-    setActiveFlags([]);
+    setCategory("");
+    setMinPrice("");
+    setMaxPrice("");
+    setMinRating(0);
+    setInStock(false);
+    setOnSale(false);
   };
-  const activeCount = activeCategories.length + activeFlags.length;
+
+  const activeCount =
+    (category ? 1 : 0) +
+    (minPrice || maxPrice ? 1 : 0) +
+    (minRating ? 1 : 0) +
+    (inStock ? 1 : 0) +
+    (onSale ? 1 : 0);
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,14 +138,98 @@ function SearchInner() {
     router.replace(`${url.pathname}?${url.searchParams.toString()}`);
   };
 
-  const loadMore = () => {
-    if (!cursor || loadMoreBusy) return;
-    runQuery(query, true, cursor);
-  };
+  const FilterPanel = () => (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold uppercase tracking-widest text-deep-navy">Filters</h2>
+        {activeCount > 0 && (
+          <button onClick={clearAll} className="text-xs font-semibold text-primary hover:underline">
+            Clear all ({activeCount})
+          </button>
+        )}
+      </div>
+
+      {/* Category (single select) */}
+      <div className="space-y-3">
+        <h3 className="text-label-caps text-on-surface-variant uppercase tracking-widest text-xs">Category</h3>
+        {BROWSE_CATEGORIES.map((cat) => (
+          <label key={cat.slug} className="flex items-center gap-3 cursor-pointer group">
+            <input
+              type="radio"
+              name="category"
+              checked={category === cat.slug}
+              onChange={() => setCategory(category === cat.slug ? "" : cat.slug)}
+              onClick={() => category === cat.slug && setCategory("")}
+              className="accent-primary w-4 h-4"
+            />
+            <span className="text-sm text-on-surface group-hover:text-deep-navy transition-colors">
+              {cat.label}
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {/* Price range */}
+      <div className="space-y-3">
+        <h3 className="text-label-caps text-on-surface-variant uppercase tracking-widest text-xs">Price (₫)</h3>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            value={minPrice}
+            onChange={(e) => setMinPrice(e.target.value)}
+            placeholder="Min"
+            className="w-full h-9 px-3 border border-deep-navy/20 rounded-lg text-xs text-on-surface bg-transparent focus:border-primary-container outline-none"
+          />
+          <span className="text-on-surface-variant">–</span>
+          <input
+            type="number"
+            min={0}
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            placeholder="Max"
+            className="w-full h-9 px-3 border border-deep-navy/20 rounded-lg text-xs text-on-surface bg-transparent focus:border-primary-container outline-none"
+          />
+        </div>
+      </div>
+
+      {/* Rating */}
+      <div className="space-y-3">
+        <h3 className="text-label-caps text-on-surface-variant uppercase tracking-widest text-xs">Rating</h3>
+        {RATING_OPTIONS.map((r) => (
+          <label key={r.value} className="flex items-center gap-3 cursor-pointer group">
+            <input
+              type="radio"
+              name="rating"
+              checked={minRating === r.value}
+              onChange={() => setMinRating(r.value)}
+              className="accent-primary w-4 h-4"
+            />
+            <span className="flex items-center gap-1 text-sm text-on-surface group-hover:text-deep-navy transition-colors">
+              {r.value > 0 && <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />}
+              {r.label}
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {/* Toggles */}
+      <div className="space-y-3">
+        <h3 className="text-label-caps text-on-surface-variant uppercase tracking-widest text-xs">Highlights</h3>
+        <label className="flex items-center gap-3 cursor-pointer group">
+          <input type="checkbox" checked={inStock} onChange={(e) => setInStock(e.target.checked)} className="accent-primary w-4 h-4" />
+          <span className="text-sm text-on-surface group-hover:text-deep-navy transition-colors">In stock only</span>
+        </label>
+        <label className="flex items-center gap-3 cursor-pointer group">
+          <input type="checkbox" checked={onSale} onChange={(e) => setOnSale(e.target.checked)} className="accent-primary w-4 h-4" />
+          <span className="text-sm text-on-surface group-hover:text-deep-navy transition-colors">On sale</span>
+        </label>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-
       <main className="flex-1">
         <div className="bg-white border-b-2 border-deep-navy py-6">
           <div className="max-w-[1280px] mx-auto px-10">
@@ -167,109 +257,26 @@ function SearchInner() {
 
         <div className="max-w-[1280px] mx-auto px-10 py-10 flex gap-10">
           <aside className="hidden lg:block w-64 shrink-0">
-            <div className="sticky top-24 space-y-8">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold uppercase tracking-widest text-deep-navy">Filters</h2>
-                {activeCount > 0 && (
-                  <button onClick={clearAll} className="text-xs font-semibold text-primary hover:underline">
-                    Clear all ({activeCount})
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                <h3 className="text-label-caps text-on-surface-variant uppercase tracking-widest text-xs">Category</h3>
-                {BROWSE_CATEGORIES.map((cat) => (
-                  <label key={cat.slug} className="flex items-center gap-3 cursor-pointer group">
-                    <div
-                      onClick={() => toggleFilter(cat.slug, activeCategories, setActiveCategories)}
-                      className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors duration-150 cursor-pointer ${
-                        activeCategories.includes(cat.slug)
-                          ? "bg-primary-container border-primary"
-                          : "border-deep-navy group-hover:border-primary"
-                      }`}
-                    >
-                      {activeCategories.includes(cat.slug) && (
-                        <svg className="w-2.5 h-2.5 text-deep-navy" fill="none" viewBox="0 0 12 12" stroke="currentColor" strokeWidth={2.5}>
-                          <path d="M2 6l3 3 5-5" />
-                        </svg>
-                      )}
-                    </div>
-                    <span
-                      onClick={() => toggleFilter(cat.slug, activeCategories, setActiveCategories)}
-                      className="text-sm text-on-surface cursor-pointer group-hover:text-deep-navy transition-colors"
-                    >
-                      {cat.label}
-                    </span>
-                  </label>
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                <h3 className="text-label-caps text-on-surface-variant uppercase tracking-widest text-xs">Highlights</h3>
-                {MATERIALS.map((mat) => (
-                  <label key={mat} className="flex items-center gap-3 cursor-pointer group">
-                    <div
-                      onClick={() => toggleFilter(mat, activeFlags, setActiveFlags)}
-                      className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors duration-150 cursor-pointer ${
-                        activeFlags.includes(mat)
-                          ? "bg-primary-container border-primary"
-                          : "border-deep-navy group-hover:border-primary"
-                      }`}
-                    >
-                      {activeFlags.includes(mat) && (
-                        <svg className="w-2.5 h-2.5 text-deep-navy" fill="none" viewBox="0 0 12 12" stroke="currentColor" strokeWidth={2.5}>
-                          <path d="M2 6l3 3 5-5" />
-                        </svg>
-                      )}
-                    </div>
-                    <span
-                      onClick={() => toggleFilter(mat, activeFlags, setActiveFlags)}
-                      className="text-sm text-on-surface cursor-pointer group-hover:text-deep-navy transition-colors"
-                    >
-                      {mat}
-                    </span>
-                  </label>
-                ))}
-              </div>
+            <div className="sticky top-24">
+              <FilterPanel />
             </div>
           </aside>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-outline-variant gap-4 flex-wrap">
-              <div className="flex items-center gap-4">
-                <p className="text-sm text-on-surface-variant">
-                  Showing <span className="font-bold text-deep-navy">{filteredProducts.length} results</span>
-                  {query.trim() && (
-                    <>
-                      {" "}for <span className="font-bold text-deep-navy">&lsquo;{query}&rsquo;</span>
-                    </>
-                  )}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <AnimatePresence>
-                  {[...activeCategories, ...activeFlags].map((f) => (
-                    <motion.span
-                      key={f}
-                      initial={{ opacity: 0, scale: 0.85 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.85 }}
-                      transition={{ duration: 0.2, ease: EASE }}
-                      className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-deep-navy text-primary-container text-xs font-bold rounded-lg"
-                    >
-                      {f}
-                      <X
-                        className="w-3 h-3 cursor-pointer"
-                        onClick={() => {
-                          toggleFilter(f, activeCategories, setActiveCategories);
-                          toggleFilter(f, activeFlags, setActiveFlags);
-                        }}
-                      />
-                    </motion.span>
-                  ))}
-                </AnimatePresence>
+              <p className="text-sm text-on-surface-variant">
+                Showing{" "}
+                <span className="font-bold text-deep-navy">
+                  {products.length} of {total} {total === 1 ? "result" : "results"}
+                </span>
+                {query.trim() && (
+                  <>
+                    {" "}for <span className="font-bold text-deep-navy">&lsquo;{query}&rsquo;</span>
+                  </>
+                )}
+              </p>
 
+              <div className="flex items-center gap-3">
                 <button
                   onClick={() => setSidebarOpen(true)}
                   className="lg:hidden flex items-center gap-2 h-9 px-4 border-2 border-deep-navy rounded-xl text-xs font-bold text-deep-navy"
@@ -277,12 +284,48 @@ function SearchInner() {
                   <SlidersHorizontal className="w-3.5 h-3.5" /> Filters {activeCount > 0 && `(${activeCount})`}
                 </button>
 
-                <div className="relative flex items-center h-9 px-4 border-2 border-deep-navy rounded-xl gap-2 cursor-pointer">
-                  <span className="text-xs font-semibold text-deep-navy">Relevance</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-deep-navy" />
+                {/* Sort dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setSortOpen((o) => !o)}
+                    className="flex items-center h-9 px-4 border-2 border-deep-navy rounded-xl gap-2"
+                  >
+                    <span className="text-xs font-semibold text-deep-navy">
+                      {SORT_OPTIONS.find((s) => s.value === sort)?.label}
+                    </span>
+                    <ChevronDown className="w-3.5 h-3.5 text-deep-navy" />
+                  </button>
+                  <AnimatePresence>
+                    {sortOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-52 bg-white border-2 border-deep-navy rounded-xl overflow-hidden z-30 shadow-lg"
+                      >
+                        {SORT_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => {
+                              setSort(opt.value);
+                              setSortOpen(false);
+                            }}
+                            className={`block w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors ${
+                              sort === opt.value
+                                ? "bg-deep-navy text-primary-container"
+                                : "text-deep-navy hover:bg-surface-container"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
-                <div className="flex items-center border-2 border-deep-navy rounded-xl overflow-hidden">
+                <div className="hidden sm:flex items-center border-2 border-deep-navy rounded-xl overflow-hidden">
                   {(["grid", "list"] as const).map((mode) => (
                     <button
                       key={mode}
@@ -314,13 +357,11 @@ function SearchInner() {
               <div className="py-16 text-center">
                 <p className="text-sm text-error font-semibold">{error}</p>
               </div>
-            ) : filteredProducts.length === 0 ? (
+            ) : products.length === 0 ? (
               <div className="py-16 text-center space-y-3">
                 <p className="text-lg font-bold text-deep-navy">No matching products.</p>
                 <p className="text-sm text-on-surface-variant">
-                  {query.trim().length < 2 && activeCategories.length === 0
-                    ? "Try a search term (at least 2 characters) or pick a category."
-                    : "Try a different keyword or fewer filters."}
+                  Try a different keyword or fewer filters.
                 </p>
               </div>
             ) : (
@@ -333,7 +374,7 @@ function SearchInner() {
                   : "flex flex-col gap-4"
                 }
               >
-                {filteredProducts.map((prod) =>
+                {products.map((prod) =>
                   viewMode === "grid" ? (
                     <motion.div
                       key={prod.id}
@@ -362,6 +403,15 @@ function SearchInner() {
                           {prod.category && (
                             <p className="text-xs text-on-surface-variant mt-0.5 uppercase tracking-wider">{prod.category}</p>
                           )}
+                          {typeof prod.rating === "number" && prod.rating > 0 && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                              <span className="text-xs font-bold text-deep-navy">{prod.rating.toFixed(1)}</span>
+                              {typeof prod.numReviews === "number" && prod.numReviews > 0 && (
+                                <span className="text-xs text-on-surface-variant">({prod.numReviews})</span>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-auto">
                           {prod.originalPrice ? (
@@ -374,15 +424,22 @@ function SearchInner() {
                           )}
                         </div>
                         <button
-                          onClick={() =>
+                          onClick={async () => {
+                            // Resolve the owning shop so the cart groups this
+                            // line by seller (and checkout gets stock linkage).
+                            const shop = await fetchShopByProduct(
+                              String(prod.id),
+                            ).catch(() => null);
                             addToCart({
                               productId: String(prod.id),
                               name: prod.name,
                               image: prod.image,
                               price: prod.price,
                               qty: 1,
-                            })
-                          }
+                              sellerId: shop?.sellerId,
+                              inventoryId: shop?.inventoryId,
+                            });
+                          }}
                           className="w-full py-2.5 border-t border-deep-navy/10 text-xs font-bold uppercase hover:bg-deep-navy hover:text-primary-container transition-all duration-200 active:scale-[0.97]"
                         >
                           Add to Cart
@@ -447,14 +504,14 @@ function SearchInner() {
               </motion.div>
             )}
 
-            {cursor && filteredProducts.length > 0 && (
+            {page < totalPages && products.length > 0 && (
               <div className="mt-12 flex justify-center">
                 <button
                   onClick={loadMore}
                   disabled={loadMoreBusy}
                   className="h-12 px-10 border-2 border-deep-navy text-label-caps text-deep-navy font-bold rounded-xl hover:bg-deep-navy hover:text-primary-container transition-all duration-200 active:scale-[0.97] disabled:opacity-60"
                 >
-                  {loadMoreBusy ? "Loading…" : "Load More"}
+                  {loadMoreBusy ? "Loading…" : `Load More (${total - products.length} left)`}
                 </button>
               </div>
             )}
@@ -485,29 +542,11 @@ function SearchInner() {
                   <X className="w-5 h-5 text-deep-navy" />
                 </button>
               </div>
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold uppercase text-on-surface-variant">Category</h3>
-                  {BROWSE_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.slug}
-                      onClick={() => toggleFilter(cat.slug, activeCategories, setActiveCategories)}
-                      className={`block w-full text-left text-sm px-3 py-2 rounded-lg ${
-                        activeCategories.includes(cat.slug)
-                          ? "bg-deep-navy text-primary-container"
-                          : "bg-surface-container-low text-on-surface"
-                      }`}
-                    >
-                      {cat.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <FilterPanel />
             </motion.div>
           </>
         )}
       </AnimatePresence>
-
     </div>
   );
 }

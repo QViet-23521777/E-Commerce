@@ -16,8 +16,20 @@ router.get("/", authenticate, (c) =>
   Request(c, `${BASE}/api/wallets/me`, "GET"),
 );
 
-router.post("/credit", authenticate, (c) =>
-  Request(c, `${BASE}/api/wallets/me/credit`, "POST"),
+// NOTE: the buyer self top-up route (POST /credit) has been removed — wallet
+// top-ups are now performed by an admin via POST /api/admin/wallets/credit.
+
+// Loyalty points: summary + history, and redeeming points for wallet credit.
+router.get("/points", authenticate, (c) =>
+  Request(c, `${BASE}/api/wallets/me/points`, "GET"),
+);
+
+router.post("/points/redeem", authenticate, (c) =>
+  Request(c, `${BASE}/api/wallets/me/points/redeem`, "POST"),
+);
+
+router.post("/withdraw", authenticate, (c) =>
+  Request(c, `${BASE}/api/wallets/me/withdraw`, "POST"),
 );
 
 export default router;

@@ -22,17 +22,38 @@ export interface PProduct extends Document {
     rating: number;
     text: string;
     date: Date;
+    // Seller's public response to this review.
+    reply?: { body: string; author: string; at: Date };
+    // Hidden by an admin (abuse/moderation). Hidden reviews are excluded from
+    // the public storefront and from the aggregate rating.
+    hidden?: boolean;
+    // How many buyers have flagged this review — surfaces it in the admin queue.
+    reportedCount?: number;
   }[];
 }
 
-// Embedded review sub-document. _id disabled — reviews are seeded/aggregated,
-// not addressed individually.
+// Embedded review sub-document. _id disabled — reviews are addressed by their
+// position (index) in the array, which is stable because reviews are only ever
+// appended (moderation hides rather than removes).
 const ReviewSchema = new Schema(
   {
     author: { type: String, required: true },
     rating: { type: Number, required: true, min: 0, max: 5 },
     text: { type: String, default: "" },
     date: { type: Date, default: Date.now },
+    reply: {
+      type: new Schema(
+        {
+          body: { type: String, required: true },
+          author: { type: String, default: "Shop" },
+          at: { type: Date, default: Date.now },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
+    hidden: { type: Boolean, default: false },
+    reportedCount: { type: Number, default: 0 },
   },
   { _id: false },
 );

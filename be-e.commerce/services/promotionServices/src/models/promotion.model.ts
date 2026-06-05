@@ -23,6 +23,10 @@ export interface IPromotion extends Document {
   usedCount: number;
   usageLimitPerUser?: number | null;
   productIds: string[];
+  // Owner of the promotion. null = admin/global promotion; otherwise the
+  // userId of the seller who created it (shop voucher). Used to scope the
+  // seller Vouchers page so a shop only manages its own codes.
+  sellerId?: string | null;
   redemptions: IPromotionRedemption[];
   createdAt: Date;
   updatedAt: Date;
@@ -64,6 +68,7 @@ const PromotionSchema = new Schema<IPromotion>(
     usedCount: { type: Number, default: 0 },
     usageLimitPerUser: { type: Number, default: null },
     productIds: { type: [String], default: [] },
+    sellerId: { type: String, default: null, index: true },
     redemptions: { type: [PromotionRedemptionSchema], default: [] },
   },
   { timestamps: true },

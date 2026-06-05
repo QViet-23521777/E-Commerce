@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { fetchCategories } from "@/lib/support";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -88,6 +89,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "rejected", label: "Rejected" },
 ];
 
+// Fallback only — used if the admin-managed category list can't be fetched.
 const TYPE_OPTIONS = [
   "Drinkware",
   "Lighting",
@@ -98,6 +100,104 @@ const TYPE_OPTIONS = [
   "Fashion",
   "Other",
 ];
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+// Searchable, scrollable category picker. Scales to a long, admin-managed list
+// without the unwieldy native <select> the seller had before.
+function SearchableSelect({
+  value,
+  onChange,
+  options,
+  disabled,
+  placeholder = "Select…",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: SelectOption[];
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = options.find((o) => o.value === value);
+  const filtered = query.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
+
+  function close() {
+    setOpen(false);
+    setQuery("");
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center justify-between w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none transition-colors disabled:bg-surface-container-low disabled:text-on-surface-variant disabled:cursor-not-allowed"
+      >
+        <span className={`truncate ${selected || value ? "text-on-surface" : "text-outline"}`}>
+          {selected ? selected.label : value || placeholder}
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 text-outline shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && !disabled && (
+        <>
+          {/* click-away catcher */}
+          <div className="fixed inset-0 z-[60]" onClick={close} />
+          <div className="absolute z-[61] mt-1.5 w-full bg-white border-2 border-deep-navy rounded-xl shadow-xl overflow-hidden">
+            <div className="p-2 border-b border-outline-variant">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-outline" />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search categories…"
+                  className="w-full h-9 pl-8 pr-3 border-2 border-deep-navy/15 rounded-lg bg-surface-container-low text-sm outline-none focus:border-primary-container"
+                />
+              </div>
+            </div>
+            <div className="max-h-52 overflow-y-auto py-1">
+              {filtered.length === 0 ? (
+                <p className="px-4 py-3 text-xs text-on-surface-variant text-center">
+                  No matching category.
+                </p>
+              ) : (
+                filtered.map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => {
+                      onChange(o.value);
+                      close();
+                    }}
+                    className={`flex items-center justify-between w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-surface-container-low ${
+                      o.value === value
+                        ? "text-deep-navy font-semibold bg-primary-container/15"
+                        : "text-on-surface"
+                    }`}
+                  >
+                    <span className="truncate">{o.label}</span>
+                    {o.value === value && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // Drawer for create (full product) / edit (stock only — no backend product-edit).
 interface DrawerState {
@@ -138,6 +238,13 @@ export default function ProductsPage() {
   const [filterCategory, setFilterCategory] = useState("All");
   const [sortBy, setSortBy] = useState("Name A–Z");
 
+  // Admin-managed categories drive the create form. `value` is the catalog
+  // `type` string (productType) stored on the product; `label` is shown to the
+  // seller. Falls back to the static list if the support service is unreachable.
+  const [categoryOptions, setCategoryOptions] = useState<SelectOption[]>(
+    TYPE_OPTIONS.map((t) => ({ value: t, label: t })),
+  );
+
   const [showDrawer, setShowDrawer] = useState(false);
   const [drawer, setDrawer] = useState<DrawerState>(EMPTY_DRAWER);
   const [drawerError, setDrawerError] = useState("");
@@ -167,8 +274,28 @@ export default function ProductsPage() {
     load(u.userId);
   }, [load]);
 
+  // Pull the live, admin-managed category list once on mount.
+  useEffect(() => {
+    (async () => {
+      try {
+        const cats = await fetchCategories();
+        if (cats.length) {
+          setCategoryOptions(
+            cats.map((c) => ({ value: c.productType || c.label, label: c.label })),
+          );
+        }
+      } catch {
+        /* keep the TYPE_OPTIONS fallback */
+      }
+    })();
+  }, []);
+
   function openCreate() {
-    setDrawer({ ...EMPTY_DRAWER, mode: "create" });
+    setDrawer({
+      ...EMPTY_DRAWER,
+      mode: "create",
+      category: categoryOptions[0]?.value ?? "",
+    });
     setDrawerError("");
     setDrawerSaved(false);
     setShowDrawer(true);
@@ -710,6 +837,7 @@ export default function ProductsPage() {
 
                         {drawer.imageMode === "upload" ? (
                           <input
+                            key="image-upload"
                             type="file"
                             accept="image/*"
                             onChange={(e) => onPickImage(e.target.files?.[0] ?? null)}
@@ -717,6 +845,7 @@ export default function ProductsPage() {
                           />
                         ) : (
                           <input
+                            key="image-url"
                             type="url"
                             value={drawer.imageUrl}
                             onChange={(e) => onPickImageUrl(e.target.value)}
@@ -752,16 +881,13 @@ export default function ProductsPage() {
                   <label className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant mb-2">
                     Category
                   </label>
-                  <select
+                  <SearchableSelect
                     value={drawer.category}
                     disabled={drawer.mode === "edit"}
-                    onChange={(e) => setDrawer((d) => ({ ...d, category: e.target.value }))}
-                    className="block w-full h-11 px-4 border-2 border-deep-navy/20 rounded-xl bg-white text-sm text-on-surface focus:border-primary-container outline-none appearance-none disabled:bg-surface-container-low disabled:text-on-surface-variant disabled:cursor-not-allowed"
-                  >
-                    {TYPE_OPTIONS.map((c) => (
-                      <option key={c}>{c}</option>
-                    ))}
-                  </select>
+                    options={categoryOptions}
+                    onChange={(v) => setDrawer((d) => ({ ...d, category: v }))}
+                    placeholder="Select a category…"
+                  />
                 </div>
 
                 {/* Description */}

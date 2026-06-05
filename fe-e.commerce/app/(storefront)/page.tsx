@@ -7,7 +7,9 @@ import FlashDealsSection from "@/components/FlashDealsSection";
 import CategorySection from "@/components/CategorySection";
 import CategoryChip from "@/components/CategoryChip";
 import ProductCard from "@/components/ProductCard";
-import { BROWSE_CATEGORIES } from "@/lib/homepage-data";
+import ProductRail from "@/components/ProductRail";
+import { BROWSE_CATEGORIES, toCategoryChips, type CategoryChipData } from "@/lib/homepage-data";
+import { fetchCategories } from "@/lib/support";
 import {
   fetchTopByType,
   fetchTopPoint,
@@ -15,6 +17,8 @@ import {
   fetchTopSale,
   type UIProduct,
 } from "@/lib/products";
+import { fetchRecommendedForYou, fetchRecentlyViewed } from "@/lib/recommendations";
+import { getUser } from "@/lib/auth";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -33,17 +37,55 @@ const fadeUp = {
   },
 };
 
-const FEATURED_TYPES = ["electronics", "fashion", "food-grocery"] as const;
+// Must match the canonical product `type` values in the catalogue (see
+// BROWSE_CATEGORIES). Lowercase retail slugs match nothing and render an empty
+// "Shop by Category" section.
+const FEATURED_TYPES = ["Electronics", "Fashion", "Kitchenware"] as const;
 const FEATURED_TITLES: Record<(typeof FEATURED_TYPES)[number], string> = {
-  electronics: "Electronics",
-  fashion: "Women's Fashion",
-  "food-grocery": "Food & Grocery",
+  Electronics: "Electronics",
+  Fashion: "Fashion",
+  Kitchenware: "Kitchenware",
 };
 
 export default function Home() {
   const [byType, setByType] = useState<Record<string, UIProduct[]>>({});
   const [justForYou, setJustForYou] = useState<UIProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<CategoryChipData[]>(BROWSE_CATEGORIES);
+  const [recommended, setRecommended] = useState<UIProduct[]>([]);
+  const [recentlyViewed, setRecentlyViewed] = useState<UIProduct[]>([]);
+
+  // Personalised rails (logged-in buyers only) — derived from the activity
+  // pipeline. Best-effort: any failure just leaves the rail empty/hidden.
+  useEffect(() => {
+    const user = getUser();
+    if (!user?.userId) return;
+    let cancelled = false;
+    (async () => {
+      const [recs, recent] = await Promise.all([
+        fetchRecommendedForYou(user.userId, 12),
+        fetchRecentlyViewed(user.userId, 10),
+      ]);
+      if (cancelled) return;
+      setRecommended(recs);
+      setRecentlyViewed(recent);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Prefer the admin-managed categories; fall back to the static list.
+      const cats = await fetchCategories().catch(() => []);
+      if (!cancelled && cats.length) setCategories(toCategoryChips(cats));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,13 +147,25 @@ export default function Home() {
             className="flex gap-7 overflow-x-auto pb-2"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {BROWSE_CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <CategoryChip key={cat.slug} label={cat.label} slug={cat.slug} Icon={cat.Icon} />
             ))}
           </div>
         </section>
 
         <FlashDealsSection />
+
+        <ProductRail
+          title="Recommended for You"
+          subtitle="Based on your activity"
+          products={recommended}
+        />
+
+        <ProductRail
+          title="Recently Viewed"
+          subtitle="Pick up where you left off"
+          products={recentlyViewed}
+        />
 
         <section className="max-w-[1280px] mx-auto px-10 space-y-5">
           <div className="flex items-center gap-3">

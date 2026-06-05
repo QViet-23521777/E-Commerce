@@ -204,6 +204,38 @@ export const getRecentActivities = async (userId: string) => {
   return { userId, views, searches, purchases, clicks };
 };
 
+/**
+ * "Customers who bought this also bought …" — a co-purchase recommendation.
+ * Find everyone who bought `productId`, then rank the OTHER products those same
+ * buyers purchased. Returns a list of catalog product ids (most co-purchased
+ * first); the caller hydrates them against the product service.
+ */
+export const getAlsoBought = async (
+  productId: string,
+  limit: number = 8,
+): Promise<string[]> => {
+  const buyers = await UserActivityModel.distinct("userId", {
+    activity: "buy",
+    productId,
+  });
+  if (buyers.length === 0) return [];
+
+  const rows = await UserActivityModel.aggregate<{ _id: string; count: number }>([
+    {
+      $match: {
+        activity: "buy",
+        userId: { $in: buyers },
+        productId: { $nin: [productId, null, ""] },
+      },
+    },
+    { $group: { _id: "$productId", count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $limit: Math.min(Number(limit) || 8, 20) },
+  ]);
+
+  return rows.map((r) => r._id).filter(Boolean);
+};
+
 export const clearActivity = async (userId: string) => {
   const queueSize = redisService.getQueue(userId).length;
   redisService.clearQueue(userId);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "motion/react";
@@ -24,7 +24,7 @@ import {
   FULFILLMENT_LABEL,
   type Order,
 } from "@/lib/orders";
-import { getOrderSnapshot } from "@/lib/cart";
+import { getOrderSnapshot, fetchOrderSnapshot, type OrderSnapshot } from "@/lib/cart";
 import { fetchSellerPublicProfile, type PublicShop } from "@/lib/seller";
 import { isLoggedIn } from "@/lib/auth";
 
@@ -106,11 +106,17 @@ export default function OrderDetailPage() {
   const [cancelling, setCancelling] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  // Snapshot gives instant line items while the live order loads.
-  const snapshot = useMemo(
-    () => (orderId ? getOrderSnapshot(orderId) : null),
-    [orderId],
+  // Snapshot gives instant line items while the live order loads. Local-first,
+  // with a server fallback so the basket is recoverable on another device.
+  const [snapshot, setSnapshot] = useState<OrderSnapshot | null>(
+    orderId ? getOrderSnapshot(orderId) : null,
   );
+  useEffect(() => {
+    if (!orderId || snapshot) return;
+    let active = true;
+    fetchOrderSnapshot(orderId).then((s) => { if (active && s) setSnapshot(s); });
+    return () => { active = false; };
+  }, [orderId, snapshot]);
 
   useEffect(() => {
     if (!isLoggedIn()) {

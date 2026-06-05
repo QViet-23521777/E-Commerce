@@ -17,7 +17,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-import { formatVND } from "@/lib/products";
+import { formatVND, fetchShopByProduct } from "@/lib/products";
 import {
   useCart,
   cartSubtotal,
@@ -30,7 +30,8 @@ import {
 import { validatePromotion, redeemPromotion, type PromotionValidation } from "@/lib/promotions";
 import { walletCheckout, createMomoPayment } from "@/lib/payments";
 import { fetchWallet, type Wallet } from "@/lib/wallet";
-import { isLoggedIn } from "@/lib/auth";
+import { isLoggedIn, getUser } from "@/lib/auth";
+import { flushActivities } from "@/lib/activity";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const SHIPPING_THRESHOLD = 500000;
@@ -150,14 +151,26 @@ export default function CheckoutPage() {
         createdAt: new Date().toISOString(),
       };
 
-      // Send real inventory-bound items only when EVERY cart item carries an
-      // inventoryId — that enables stock deduction + seller attribution. If any
-      // item lacks it (legacy basket), fall back to an amount-only checkout so
-      // the flow never hard-breaks.
-      const allBound = items.length > 0 && items.every((i) => i.inventoryId);
-      const checkoutItems = allBound
-        ? items.map((i) => ({ productId: i.inventoryId as string, quantity: i.qty }))
-        : undefined;
+      // Resolve the inventory linkage for EVERY line so the order is always
+      // seller-attributed and stock-deducting — never silently amount-only.
+      // The catalog `productId` is always present, so re-resolve any line whose
+      // `inventoryId` is missing (added before the shop lookup, merged from a
+      // guest cart, or where the lookup hadn't finished). A single unlinked
+      // line must NOT collapse the whole order to amount-only (the old bug that
+      // hid orders from sellers).
+      const inventoryIds = await Promise.all(
+        items.map(async (i) =>
+          i.inventoryId ||
+          (await fetchShopByProduct(i.productId).catch(() => null))?.inventoryId,
+        ),
+      );
+      const checkoutItems = items
+        .map((i, idx) => ({ inventoryId: inventoryIds[idx], quantity: i.qty }))
+        .filter(
+          (x): x is { inventoryId: string; quantity: number } => !!x.inventoryId,
+        )
+        .map((x) => ({ productId: x.inventoryId, quantity: x.quantity }));
+
       const shippingAddress = {
         fullName: `${delivery.fn} ${delivery.ln}`.trim(),
         phone: delivery.phone,
@@ -166,28 +179,35 @@ export default function CheckoutPage() {
         zip: delivery.zip,
       };
 
-      // When items are sent, the backend recomputes the amount from inventory
-      // prices and rejects a mismatching `amount`, so omit it in that case and
-      // pass `total` only for the amount-only fallback path.
-      const checkoutBase = checkoutItems
-        ? {
-            orderInfo,
-            items: checkoutItems,
-            shippingAddress,
-            shippingMethod: shipping,
-          }
-        : {
-            amount: total,
-            orderInfo,
-            shippingAddress,
-            shippingMethod: shipping,
-          };
+      // Always charge the storefront `total` (it carries shipping + discount,
+      // which the backend can't recompute). When item lines resolved, send them
+      // too so the order is recorded per-seller and stock is deducted; the
+      // backend now accepts `items` alongside `amount`.
+      const checkoutBase =
+        checkoutItems.length > 0
+          ? {
+              amount: total,
+              orderInfo,
+              items: checkoutItems,
+              shippingAddress,
+              shippingMethod: shipping,
+            }
+          : {
+              amount: total,
+              orderInfo,
+              shippingAddress,
+              shippingMethod: shipping,
+            };
 
       if (payMethod === "wallet") {
         const payment = await walletCheckout(checkoutBase);
         saveOrderSnapshot({ orderId: payment.orderId, method: "wallet", ...snapshotBase });
         clearCart();
         setAppliedCoupon(null);
+        // Order is confirmed now → the payment service has recorded "buy"
+        // activities; flush them so "Customers also bought" can learn from them.
+        const u = getUser();
+        if (u?.userId) flushActivities(u.userId);
         router.push(`/order-confirmation?orderId=${encodeURIComponent(payment.orderId)}`);
       } else {
         const payment = await createMomoPayment(checkoutBase);

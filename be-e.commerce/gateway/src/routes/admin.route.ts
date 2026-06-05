@@ -44,6 +44,59 @@ router.post(
 );
 
 router.get(
+  "/stats",
+  authenticate,
+  injectInternalSecret,
+  ipWhitelist,
+  checkAdminAuthorization,
+  (c) => Request(c, `${process.env.USER_SERVICE_URL}/api/admin/stats`, "GET"),
+);
+
+router.get(
+  "/users",
+  authenticate,
+  injectInternalSecret,
+  ipWhitelist,
+  checkAdminAuthorization,
+  (c) => Request(c, `${process.env.USER_SERVICE_URL}/api/admin/users`, "GET"),
+);
+
+router.post(
+  "/unban-user",
+  authenticate,
+  injectInternalSecret,
+  ipWhitelist,
+  checkAdminAuthorization,
+  (c) =>
+    Request(c, `${process.env.USER_SERVICE_URL}/api/admin/unban-user`, "POST"),
+);
+
+// Admin tops up a user's wallet. Same admin guard as ban-user; proxied to the
+// payment service's admin credit endpoint (target userId travels in the body).
+router.post(
+  "/wallets/credit",
+  authenticate,
+  injectInternalSecret,
+  ipWhitelist,
+  checkAdminAuthorization,
+  (c) =>
+    Request(
+      c,
+      `${process.env.PAYMENT_SERVICE_URL}/api/wallets/admin/credit`,
+      "POST",
+    ),
+);
+
+router.get(
+  "/products/stats",
+  authenticate,
+  injectInternalSecret,
+  ipWhitelist,
+  checkAdminAuthorization,
+  (c) => Request(c, `${INVENTORY_BASE}/api/products/stats`, "GET"),
+);
+
+router.get(
   "/products/moderation",
   authenticate,
   injectInternalSecret,

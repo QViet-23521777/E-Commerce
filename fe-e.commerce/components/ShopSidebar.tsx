@@ -25,6 +25,7 @@ const NAV = [
   { href: "/shop/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/shop/products", label: "Products", icon: Package },
   { href: "/shop/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/shop/reviews", label: "Reviews", icon: Star },
   { href: "/shop/messages", label: "Messages", icon: MessageCircle },
   { href: "/shop/finance", label: "Finance", icon: BarChart3 },
   { href: "/shop/vouchers", label: "Vouchers", icon: Ticket },

@@ -32,6 +32,17 @@ router.get("/recent/:userId", injectInternalSecret, (c) => {
   return Request(c, `${BASE}/api/activities/recent/${userId}`, "GET");
 });
 
+// "Customers also bought" — public co-purchase recommendation for a product.
+router.get("/also-bought/:productId", injectInternalSecret, (c) => {
+  const productId = c.req.param("productId");
+  const limit = c.req.query("limit") ?? "8";
+  return Request(
+    c,
+    `${BASE}/api/activities/also-bought/${productId}?limit=${limit}`,
+    "GET",
+  );
+});
+
 router.delete("/queue/:userId", authenticate, (c) => {
   const userId = c.req.param("userId");
   return Request(c, `${BASE}/api/activities/queue/${userId}`, "DELETE");

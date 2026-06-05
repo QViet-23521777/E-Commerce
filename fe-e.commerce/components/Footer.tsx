@@ -1,6 +1,11 @@
 import Link from "next/link";
 
-const FOOTER_LINKS = ["Terms of Service", "Privacy Policy", "Sustainability", "Contact"];
+const FOOTER_LINKS: { label: string; href: string }[] = [
+  { label: "Terms of Service", href: "#" },
+  { label: "Privacy Policy", href: "#" },
+  { label: "Sustainability", href: "#" },
+  { label: "Contact", href: "/contact" },
+];
 
 export default function Footer() {
   return (
@@ -11,13 +16,13 @@ export default function Footer() {
         </Link>
         <nav className="flex flex-wrap justify-center gap-x-8 gap-y-3">
           {FOOTER_LINKS.map((link) => (
-            <a
-              key={link}
-              href="#"
+            <Link
+              key={link.label}
+              href={link.href}
               className="text-xs font-bold uppercase tracking-widest text-ice-blue/60 hover:text-primary-container transition-colors duration-150 hover:underline underline-offset-8 decoration-2"
             >
-              {link}
-            </a>
+              {link.label}
+            </Link>
           ))}
         </nav>
         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ice-blue/40 text-center">

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import {
   authenticate,
   injectInternalSecret,
+  checkAdminAuthorization,
 } from "../middleware/authMiddleware";
 import { Request } from "../utils/proxy";
 
@@ -9,9 +10,10 @@ const router = new Hono();
 const BASE = process.env.INVENTORY_SERVICE_URL || process.env.PRODUCT_SERVICE_URL;
 
 router.get("/search", injectInternalSecret, (c) => {
-  const q = c.req.query("q");
-  const limit = c.req.query("limit");
-  return Request(c, `${BASE}/api/products/search?q=${q}&limit=${limit}`, "GET");
+  // Forward the full query string so storefront filters (type, price range,
+  // rating, in-stock, sort, page) all reach the inventory service intact.
+  const search = new URL(c.req.url).search; // includes leading "?" or ""
+  return Request(c, `${BASE}/api/products/search${search}`, "GET");
 });
 
 router.get("/top/purchases", injectInternalSecret, (c) =>
@@ -43,6 +45,53 @@ router.post("/recommend/:userId", authenticate, (c) => {
 router.post("/", authenticate, (c) =>
   Request(c, `${BASE}/api/products`, "POST"),
 );
+
+router.post("/:productId/reviews", authenticate, (c) => {
+  const productId = c.req.param("productId");
+  return Request(c, `${BASE}/api/products/${productId}/reviews`, "POST");
+});
+
+// ── Review replies & moderation ──────────────────────────────────────────────
+// Seller's own product reviews (seller identity = x-user-id, forwarded).
+router.get("/reviews/seller", authenticate, (c) =>
+  Request(c, `${BASE}/api/products/reviews/seller`, "GET"),
+);
+// Admin moderation queue.
+router.get("/reviews/reported", authenticate, checkAdminAuthorization, (c) =>
+  Request(c, `${BASE}/api/products/reviews/reported`, "GET"),
+);
+// Seller replies to a review on one of their products.
+router.post("/:productId/reviews/:index/reply", authenticate, (c) => {
+  const { productId, index } = c.req.param();
+  return Request(
+    c,
+    `${BASE}/api/products/${productId}/reviews/${index}/reply`,
+    "POST",
+  );
+});
+// Admin hides/unhides a review.
+router.patch(
+  "/:productId/reviews/:index/moderate",
+  authenticate,
+  checkAdminAuthorization,
+  (c) => {
+    const { productId, index } = c.req.param();
+    return Request(
+      c,
+      `${BASE}/api/products/${productId}/reviews/${index}/moderate`,
+      "PATCH",
+    );
+  },
+);
+// Any signed-in buyer flags a review for moderation.
+router.post("/:productId/reviews/:index/report", authenticate, (c) => {
+  const { productId, index } = c.req.param();
+  return Request(
+    c,
+    `${BASE}/api/products/${productId}/reviews/${index}/report`,
+    "POST",
+  );
+});
 
 router.get("/:productId", injectInternalSecret, (c) => {
   const productId = c.req.param("productId");
