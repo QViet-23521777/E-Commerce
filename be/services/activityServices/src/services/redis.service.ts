@@ -15,6 +15,7 @@ class RedisServices {
   private client: Redis;
 
   private eventQueue: Map<string, UserActivity[]> = new Map();
+  private lastEventTime: Map<string, number> = new Map();
   private readonly BATCH_SIZE = 10;
   private readonly MAX_QUEUE_SIZE = 20;
 
@@ -43,6 +44,7 @@ class RedisServices {
     const queue = this.eventQueue.get(userId)!;
     if (queue.length >= this.MAX_QUEUE_SIZE) return true;
     queue.push(event);
+    this.lastEventTime.set(userId, Date.now());
 
     return queue.length >= this.BATCH_SIZE;
   }
@@ -53,6 +55,16 @@ class RedisServices {
 
   clearQueue(userId: string): void {
     this.eventQueue.delete(userId);
+    this.lastEventTime.delete(userId);
+  }
+
+  getStaleUserIds(thresholdMs: number): string[] {
+    const now = Date.now();
+    return [...this.eventQueue.keys()].filter(
+      (userId) =>
+        (this.eventQueue.get(userId)?.length ?? 0) > 0 &&
+        now - (this.lastEventTime.get(userId) ?? 0) > thresholdMs,
+    );
   }
 
   private async pushActivity(

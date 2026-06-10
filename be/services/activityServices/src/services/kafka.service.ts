@@ -54,6 +54,36 @@ class KafkaService {
       throw error;
     }
   }
+
+  async startActivityCosumer(
+    handler: (data: {
+      userId: string;
+      activity: string;
+      productId: string;
+    }) => Promise<void>,
+  ): Promise<void> {
+    const topic = process.env.KAFKA_ACTIVITY_TOPIC || "payment.activity";
+    const consumer = this.kafka.consumer({
+      groupId: "activity-service-consumer",
+    });
+
+    await consumer.connect();
+    await consumer.subscribe({ topic, fromBeginning: false });
+
+    await consumer.run({
+      eachMessage: async ({ message }) => {
+        if (!message.value) return;
+        try {
+          const data = JSON.parse(message.value.toString());
+          await handler(data);
+        } catch (err) {
+          console.error("[KafkaConsumer] Failed to process message:", err);
+        }
+      },
+    });
+
+    console.log(`✅ Kafka consumer started, topic: ${topic}`);
+  }
 }
 
 export const kafkaService = new KafkaService();

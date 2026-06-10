@@ -1,15 +1,22 @@
-import axios from "axios";
+import amqplib from "amqplib";
 
-const MAIL_SERVICE_URL =
-  process.env.MAIL_SERVICE_URL || "http://localhost:3002";
+const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://localhost:5672";
+
+async function publish(pattern: string, data: object): Promise<void> {
+  const conn = await amqplib.connect(RABBITMQ_URL);
+  const channel = await conn.createChannel();
+  await channel.assertQueue("mail_queue", { durable: true });
+
+  const message = JSON.stringify({ pattern, data });
+  channel.sendToQueue("mail_queue", Buffer.from(message), { persistent: true });
+
+  await channel.close();
+  await conn.close();
+}
 
 export const mailClient = {
   sendVerifyEmail: (email: string, name: string, verifyUrl: string) =>
-    axios.post(`${MAIL_SERVICE_URL}/test/verify-email`, {
-      email,
-      name,
-      verifyUrl,
-    }),
+    publish("send_verification_email", { email, name, verifyUrl }),
 
   sendResetPassword: (
     email: string,
@@ -17,59 +24,24 @@ export const mailClient = {
     token: string,
     otp: string,
     expiredAt: string,
-  ) =>
-    axios.post(`${MAIL_SERVICE_URL}/test/reset-password`, {
-      email,
-      name,
-      token,
-      otp,
-      expiredAt,
-    }),
+  ) => publish("send_reset_password_email", { email, name, token, otp, expiredAt }),
 
   sendLoginEmail: (
     email: string,
     name: string,
     otp: string,
     expiredAt: string,
-  ) =>
-    axios.post(`${MAIL_SERVICE_URL}/test/login-notification`, {
-      email,
-      name,
-      otp,
-      expiredAt,
-    }),
+  ) => publish("send_login_notification_email", { email, name, otp, expiredAt }),
 
   sendSellerAccountVerificationEmail: (
     email: string,
     otp: string,
     expiredAt: string,
-  ) =>
-    axios.post(`${MAIL_SERVICE_URL}/test/seller-account-verification`, {
-      email,
-      otp,
-      expiredAt,
-    }),
+  ) => publish("send_seller_account_verification_email", { email, otp, expiredAt }),
 
-  sendAdminAccountVerificationEmail: async (
+  sendAdminAccountVerificationEmail: (
     email: string,
     token: string,
     expiredAt: string,
-  ) => {
-    try {
-      await axios.post(`${MAIL_SERVICE_URL}/test/send-admin-mail`, {
-        email,
-        token,
-        expiredAt,
-      });
-
-      console.log("Admin account verification email sent:", {
-        email,
-        token,
-        expiredAt,
-      });
-    } catch (error: any) {
-      console.error("Failed to send admin verification email:", error.message);
-      throw error;
-    }
-  },
+  ) => publish("send_admin_account_email", { email, token, expiredAt }),
 };

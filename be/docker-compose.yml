@@ -95,6 +95,7 @@ services:
     env_file: ./services/paymentServices/.env.docker
     depends_on:
       - mongodb
+      - kafka
     networks:
       - ecommerce-net
     restart: on-failure

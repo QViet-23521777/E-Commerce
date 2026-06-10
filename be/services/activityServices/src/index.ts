@@ -10,6 +10,10 @@ import {
 } from "./controllers/health";
 import { openapiSpec } from "./openapi";
 import { swaggerHtml } from "./utils/swagger.html";
+import { kafkaService } from "./services/kafka.service";
+import { addActivity, flushActivity } from "./services/activity.service";
+import { redisService } from "./services/redis.service";
+
 const app = new Hono();
 
 app.use("*", async (c, next) => {
@@ -49,9 +53,25 @@ const mongoUri = process.env.MONGODB_URI || "mongodb://mongodb:27017/activity";
 
 mongoose
   .connect(mongoUri)
-  .then(() => {
+  .then(async () => {
     console.log("Connected to MongoDB");
-    console.log(`User service is running on http://localhost:${port}`);
+    await kafkaService.startActivityCosumer(async (data) => {
+      await addActivity({
+        userId: data.userId,
+        activity: data.activity as "buy",
+        productId: data.productId,
+      });
+    });
+    const FLUSH_THRESHOLD_MS = 2 * 60 * 1000;
+    setInterval(async () => {
+      const staleUsers = redisService.getStaleUserIds(FLUSH_THRESHOLD_MS);
+      for (const userId of staleUsers) {
+        await flushActivity(userId);
+        console.log(`⏱️ Auto-flush queue cho user ${userId}`);
+      }
+    }, 60_000);
+
+    console.log(`Activity service is running on http://localhost:${port}`);
     serve({ fetch: app.fetch.bind(app), port });
   })
   .catch((error) => {

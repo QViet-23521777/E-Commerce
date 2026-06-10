@@ -6,6 +6,7 @@ import {
   verifyMomoIpnSignature,
 } from "./momo.service";
 import { creditWallet, debitWallet } from "./wallet.service";
+import { publishActivityEvents } from "./kafka.producer";
 
 type CreatePaymentItemInput = {
   productId: string;
@@ -47,44 +48,34 @@ type ProductSnapshot = {
 const PRODUCT_SERVICE_URL =
   process.env.PRODUCT_SERVICE_URL || "http://localhost:3003";
 
-const ACTIVITY_SERVICE_URL =
-  process.env.ACTIVITY_SERVICE_URL || "http://localhost:3004";
 
 const createOrderId = (): string => crypto.randomUUID();
 const createRequestId = (): string => crypto.randomUUID();
 
-const recordBuyActivities = async (
+const recordBuyActivities = (
   userId: string,
   items: { productId: string; quantity: number }[],
 ) => {
-  try {
-    await Promise.all(
-      items.map((item) =>
-        fetch(`${ACTIVITY_SERVICE_URL}/api/activities`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId,
-            activity: "buy",
-            productId: item.productId,
-          }),
-        }),
-      ),
-    );
-    console.log("[recordBuyActivities] recorded", {
-      userId,
-      count: items.length,
-    });
-  } catch (err) {
-    // Không throw — activity là non-critical
-    console.warn("[recordBuyActivities] failed, skipping", err);
-  }
+  publishActivityEvents(userId, items).catch((err) => {
+    console.warn("[recordBuyActivities] Kafka publish failed, skipping", err);
+  });
 };
 
 const fetchInventory = async (productId: string): Promise<ProductSnapshot> => {
-  const response = await fetch(
-    `${PRODUCT_SERVICE_URL.replace(/\/$/, "")}/api/inventory/${productId}`,
-  );
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${PRODUCT_SERVICE_URL.replace(/\/$/, "")}/api/inventory/${productId}`,
+      { signal: controller.signal },
+    );
+  } catch (error) {
+    throw new Error(`Inventory service unreachable for product ${productId}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const data = (await response.json()) as {
     success?: boolean;
@@ -154,20 +145,32 @@ const buyInventoryByList = async (
 const restoreInventoryByList = async (
   items: { inventoryId: string; quantity: number }[],
 ) => {
-  const response = await fetch(
-    `${PRODUCT_SERVICE_URL}/api/inventory/restore/batch`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items }),
-    },
-  );
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
-  if (!response.ok) {
-    throw new Error("Failed to restore inventory");
+  try {
+    const response = await fetch(
+      `${PRODUCT_SERVICE_URL}/api/inventory/restore/batch`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+        signal: controller.signal,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to restore inventory");
+    }
+
+    return response.json();
+  } catch (error) {
+    throw new Error(
+      "Inventory restore failed: service unreachable or timed out",
+    );
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return response.json();
 };
 
 const resolveItemsAndAmount = async (payload: CreatePaymentInput) => {
@@ -436,7 +439,9 @@ export const processMomoIpn = async (payload: any) => {
   if (!payment) {
     throw new Error("Payment not found");
   }
-
+  if (payment.status === "paid" || payment.status === "failed") {
+    return payment;
+  } //xử lý khi đã paid rồi nhưng mà
   if (payload.partnerCode !== payment.partnerCode) {
     throw new Error("Partner code mismatch");
   }
@@ -455,19 +460,29 @@ export const processMomoIpn = async (payload: any) => {
 
   if (payment.resultCode === 0) {
     // Flow mua hàng trực tiếp → trừ tồn kho + ghi activity
-    if (payment.items.length > 0) {
+    if (payment.items.length > 0 && !payment.inventoryDeducted) {
       await buyInventoryByList(
         payment.items.map((item: { productId: string; quantity: number }) => ({
           inventoryId: item.productId,
           quantity: item.quantity,
         })),
       );
-      await recordBuyActivities(payment.userId, payment.items);
+      payment.inventoryDeducted = true;
+      await payment.save();
     }
 
+    if (payment.items.length > 0) {
+      recordBuyActivities(payment.userId, payment.items);
+    }
     // Flow nạp ví → cộng số dư
-    if (payment.walletId && payment.items.length === 0) {
+    if (
+      payment.walletId &&
+      payment.items.length === 0 &&
+      !payment.walletCredited
+    ) {
       await creditWallet(payment.userId, payment.amount);
+      payment.walletCredited = true;
+      await payment.save();
     }
 
     payment.status = "paid";
@@ -494,8 +509,7 @@ export const checkoutWithWallet = async (
   console.log("[checkoutWithWallet] start", { userId, payload });
 
   const orderId = createOrderId();
-  const orderInfo =
-    payload.orderInfo?.trim() || "Thanh toan don hang MiniSupermarket";
+  const orderInfo = payload.orderInfo?.trim() || "Thanh toan don hang ";
 
   const { amount, items } = await resolveItemsAndAmount(payload);
   console.log("[checkoutWithWallet] resolvedItems", { amount, items });
@@ -517,7 +531,7 @@ export const checkoutWithWallet = async (
         })),
       );
       console.log("[checkoutWithWallet] inventory bought");
-      await recordBuyActivities(userId, items);
+      recordBuyActivities(userId, items);
     } catch (error) {
       // Tồn kho thất bại → hoàn tiền lại ví
       console.log("[checkoutWithWallet] inventory failed, refunding wallet...");
@@ -525,7 +539,9 @@ export const checkoutWithWallet = async (
       throw error;
     }
   } else {
-    console.log("[checkoutWithWallet] amount-only checkout, skipping inventory");
+    console.log(
+      "[checkoutWithWallet] amount-only checkout, skipping inventory",
+    );
   }
 
   // Tạo payment record đã paid
@@ -622,10 +638,7 @@ export const listOrdersForSeller = async (
   return payments.map((p) => normalizeSellerOrder(p, sellerId));
 };
 
-export const getSellerOrderById = async (
-  orderId: string,
-  sellerId: string,
-) => {
+export const getSellerOrderById = async (orderId: string, sellerId: string) => {
   const payment = await PaymentModel.findOne({ orderId });
   if (!payment) {
     throw new Error("Payment not found");
@@ -714,13 +727,19 @@ export const cancelOrder = async (orderId: string, actorId: string) => {
 
   // Refund + restore only for a paid wallet order. MoMo refunds are out of scope.
   if (payment.status === "paid" && payment.partnerCode === "WALLET") {
-    if (payment.items && payment.items.length > 0) {
+    if (
+      payment.items &&
+      payment.items.length > 0 &&
+      !payment.inventoryRestored
+    ) {
       await restoreInventoryByList(
         payment.items.map((item: { productId: string; quantity: number }) => ({
           inventoryId: item.productId,
           quantity: item.quantity,
         })),
       );
+      payment.inventoryRestored = true;
+      await payment.save();
     }
     await creditWallet(payment.userId, payment.amount);
     payment.refundedAt = new Date();

@@ -84,7 +84,7 @@ const flushBatch = async (userId: string) => {
   console.log(
     `Flushed ${flushedCount} events for userId ${userId}, queue: `,
     queue,
-  ); //ở đây có nhưng vào services thì không track được
+  );
   const recommendData = await callRecommend(userId, queue);
   console.log("Recommend data:", recommendData);
   try {

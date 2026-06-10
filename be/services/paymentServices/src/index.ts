@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import mongoose from "mongoose";
 import paymentRoutes from "./routes/payment.route";
 import walletRouter from "./routes/wallet.route";
+import { connectKafkaProducer } from "./services/kafka.producer";
 
 const app = new Hono();
 
@@ -24,13 +25,13 @@ app.get("/health", (c) => {
 });
 
 const port = Number(process.env.PORT || 3005);
-const mongoUri =
-  process.env.MONGODB_URI || "mongodb://localhost:27017/payment";
+const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017/payment";
 
 mongoose
   .connect(mongoUri)
-  .then(() => {
+  .then(async () => {
     console.log("Connected to MongoDB");
+    await connectKafkaProducer();
     console.log(`Payment service is running on http://localhost:${port}`);
     serve({
       fetch: app.fetch.bind(app),

@@ -43,6 +43,41 @@ class KafkaConsumerService {
           if (!userId || !events || !Array.isArray(events)) return;
 
           console.log(`📦 Nhận batch ${totalEvents} events từ user: ${userId}`);
+
+          const productScores = new Map<string, number>();
+          const activityTypes = new Set<string>();
+
+          for (const event of events) {
+            const { productId, activity } = event;
+            if (activity) activityTypes.add(activity);
+            if (!productId) continue;
+            const weight =
+              ACTIVITY_WEIGHT[activity as keyof typeof ACTIVITY_WEIGHT] ?? 1;
+            productScores.set(
+              productId,
+              (productScores.get(productId) ?? 0) + weight,
+            );
+          }
+
+          if (productScores.size === 0) return;
+
+          const sortedProducts = [...productScores.entries()].sort(
+            (a, b) => b[1] - a[1],
+          );
+
+          for (const [productId] of sortedProducts) {
+            await redisService.addRecommend(userId, productId);
+          }
+
+          await redisService.setRecommendationData(userId, {
+            productId: sortedProducts.map(([pid]) => pid),
+            types: [...activityTypes].filter(Boolean),
+            updatedAt: new Date(),
+          });
+
+          console.log(
+            `✅ Recommend cập nhật: ${sortedProducts.length} sản phẩm cho user ${userId}`,
+          );
         } catch (error) {
           console.error("❌ Kafka message error:", error);
         }
@@ -60,10 +95,10 @@ class KafkaConsumerService {
 
   async ping(): Promise<string> {
     try {
-      await this.consumer.subscribe({
-        topic: config.kafkaTopic,
-        fromBeginning: false,
-      });
+      const admin = this.kafka.admin();
+      await admin.connect();
+      await admin.listTopics();
+      await admin.disconnect();
       return "PONG";
     } catch (error) {
       console.error("Kafka ping error:", error);

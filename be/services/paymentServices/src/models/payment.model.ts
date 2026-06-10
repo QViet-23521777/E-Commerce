@@ -57,6 +57,9 @@ export interface IPayment extends Document {
   ipnPayload?: Record<string, unknown>;
   paidAt?: Date | null;
   failedAt?: Date | null;
+  inventoryDeducted?: boolean;
+  walletCredited?: boolean;
+  inventoryRestored?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -128,6 +131,9 @@ const PaymentSchema = new Schema<IPayment>(
     ipnPayload: { type: Schema.Types.Mixed, default: null },
     paidAt: { type: Date, default: null },
     failedAt: { type: Date, default: null },
+    inventoryDeducted: { type: Boolean, default: false },
+    walletCredited: { type: Boolean, default: false },
+    inventoryRestored: { type: Boolean, default: false },
   },
   {
     timestamps: true,
