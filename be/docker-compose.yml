@@ -6,6 +6,12 @@ services:
     ports:
       - "3000:3000"
     env_file: ./gateway/.env.docker
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
       - user-service
       - inventory-service
@@ -16,7 +22,7 @@ services:
       - chat-service
     networks:
       - ecommerce-net
-    restart: on-failure
+    restart: always
     volumes:
       - ./gateway/src:/app/src
     command: npm run dev
@@ -24,9 +30,6 @@ services:
   # ========== MICROSERVICES ==========
   user-service:
     build: ./services/userServices
-    container_name: ecommerce-user-service
-    ports:
-      - "3001:3001"
     env_file: ./services/userServices/.env.docker
     depends_on:
       - mongodb
@@ -39,9 +42,6 @@ services:
 
   inventory-service:
     build: ./services/inventoryServices
-    container_name: ecommerce-inventory-service
-    ports:
-      - "3003:3003"
     env_file: ./services/inventoryServices/.env.docker
     depends_on:
       - mongodb
@@ -56,9 +56,6 @@ services:
 
   activity-service:
     build: ./services/activityServices
-    container_name: ecommerce-activity-service
-    ports:
-      - "3004:3004"
     env_file: ./services/activityServices/.env.docker
     depends_on:
       - mongodb
@@ -73,9 +70,6 @@ services:
 
   chat-service:
     build: ./services/chatServices
-    container_name: ecommerce-chat-service
-    ports:
-      - "3007:3007"
     env_file: ./services/chatServices/.env.docker
     depends_on:
       - mongodb
@@ -89,9 +83,6 @@ services:
   payment-service:
     build: ./services/paymentServices
     image: paymentservices:latest
-    container_name: ecommerce-payment-service
-    ports:
-      - "3005:3005"
     env_file: ./services/paymentServices/.env.docker
     depends_on:
       - mongodb
@@ -105,9 +96,6 @@ services:
 
   promotion-service:
     build: ./services/promotionServices
-    container_name: ecommerce-promotion-service
-    ports:
-      - "3006:3006"
     env_file: ./services/promotionServices/.env.docker
     depends_on:
       - mongodb

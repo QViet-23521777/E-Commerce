@@ -48,8 +48,8 @@ class RedisServices {
   async setRecommendationData(
     userId: string,
     data: {
-      productId: string[];
-      types: string[];
+      productIds: string[];
+      categories: string[];
       updatedAt: Date;
     },
   ): Promise<void> {

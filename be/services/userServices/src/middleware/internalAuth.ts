@@ -1,13 +1,21 @@
 import { Context, Next } from "hono";
+import jwt from "jsonwebtoken";
+
+const publicKey = Buffer.from(process.env.PUBLIC_KEY_B64!, "base64").toString();
 
 export const internalAuth = async (c: Context, next: Next) => {
-  const secret = c.req.header("x-internal-secret");
+  const token = c.req.header("x-internal-token");
 
-  console.log("x-internal-secret received:", secret);
-  console.log("INTERNAL_SECRET from env:", process.env.INTERNAL_SECRET);
-  console.log("Match:", secret === process.env.INTERNAL_SECRET);
+  if (!token) {
+    return c.json({ success: false, message: "Forbidden" }, 403);
+  }
 
-  if (!secret || secret !== process.env.INTERNAL_SECRET) {
+  try {
+    const decoded = jwt.verify(token, publicKey, { algorithms: ["RS256"] }) as { caller: string };
+    if (decoded.caller !== "gateway") {
+      return c.json({ success: false, message: "Forbidden" }, 403);
+    }
+  } catch {
     return c.json({ success: false, message: "Forbidden" }, 403);
   }
 

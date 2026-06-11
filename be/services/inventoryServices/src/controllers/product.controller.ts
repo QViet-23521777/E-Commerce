@@ -135,7 +135,7 @@ export const handleGetTopByType = async (c: Context) => {
 // ─── TOP SẢN PHẨM THEO NHIỀU LOẠI ───────────────────
 export const handleGetTopByListType = async (c: Context) => {
   try {
-    const limit = Number(c.req.query("limit")) || 2;
+    const limit = Number(c.req.query("limit")) || 5;
     const typeQuery = c.req.query("type");
 
     if (!typeQuery) {

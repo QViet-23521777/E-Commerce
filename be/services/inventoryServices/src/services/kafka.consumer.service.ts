@@ -48,14 +48,18 @@ class KafkaConsumerService {
           const activityTypes = new Set<string>();
 
           for (const event of events) {
-            const { productId, activity } = event;
+            const { productId, activity, timestamp } = event;
             if (activity) activityTypes.add(activity);
             if (!productId) continue;
             const weight =
               ACTIVITY_WEIGHT[activity as keyof typeof ACTIVITY_WEIGHT] ?? 1;
+            const daysSince = timestamp
+              ? (Date.now() - Number(timestamp)) / (1000 * 60 * 60 * 24)
+              : 0;
+            const decayFactor = Math.exp(-0.1 * daysSince);
             productScores.set(
               productId,
-              (productScores.get(productId) ?? 0) + weight,
+              (productScores.get(productId) ?? 0) + weight * decayFactor,
             );
           }
 
@@ -70,8 +74,8 @@ class KafkaConsumerService {
           }
 
           await redisService.setRecommendationData(userId, {
-            productId: sortedProducts.map(([pid]) => pid),
-            types: [...activityTypes].filter(Boolean),
+            productIds: sortedProducts.map(([pid]) => pid),
+            categories: [...activityTypes].filter(Boolean),
             updatedAt: new Date(),
           });
 

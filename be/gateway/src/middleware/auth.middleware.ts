@@ -1,5 +1,14 @@
 import { Context, Next } from "hono";
+import jwt from "jsonwebtoken";
 import { JwtUtils } from "../utils/jwt.utils";
+
+let cachedPrivateKey: string | null = null;
+const getPrivateKey = () => {
+  if (!cachedPrivateKey) {
+    cachedPrivateKey = Buffer.from(process.env.PRIVATE_KEY_B64!, "base64").toString();
+  }
+  return cachedPrivateKey;
+};
 
 export const authenticate = async (c: Context, next: Next) => {
   try {
@@ -25,10 +34,15 @@ export const authenticate = async (c: Context, next: Next) => {
     c.set("userEmail", decoded.email);
     c.set("userRole", decoded.role ?? "user");
 
+    const serviceToken = jwt.sign(
+      { caller: "gateway" },
+      getPrivateKey(),
+      { algorithm: "RS256", expiresIn: "60s" },
+    );
     c.req.raw.headers.set("x-user-id", decoded.userId);
     c.req.raw.headers.set("x-user-email", decoded.email);
     c.req.raw.headers.set("x-user-role", decoded.role ?? "user");
-    c.req.raw.headers.set("x-internal-secret", process.env.INTERNAL_SECRET!);
+    c.req.raw.headers.set("x-internal-token", serviceToken);
 
     console.log("✅ User authenticated:", decoded.email);
     await next();
@@ -59,8 +73,12 @@ export const authorize = (...roles: string[]) => {
 };
 
 export const injectInternalSecret = async (c: Context, next: Next) => {
-  c.req.raw.headers.set("x-internal-secret", process.env.INTERNAL_SECRET!);
-  console.log("✅ Injected internal secret");
+  const serviceToken = jwt.sign(
+    { caller: "gateway" },
+    getPrivateKey(),
+    { algorithm: "RS256", expiresIn: "60s" },
+  );
+  c.req.raw.headers.set("x-internal-token", serviceToken);
   await next();
 };
 

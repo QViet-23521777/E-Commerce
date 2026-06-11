@@ -25,6 +25,24 @@ const SERVICES = [
       `${process.env.ACTIVITY_SERVICE_URL}/health` ||
       "http://localhost:3004/health",
   },
+  {
+    name: "payment-service",
+    url:
+      `${process.env.PAYMENT_SERVICE_URL}/health` ||
+      "http://localhost:3005/health",
+  },
+  {
+    name: "promotion-service",
+    url:
+      `${process.env.PROMOTION_SERVICE_URL}/health` ||
+      "http://localhost:3006/health",
+  },
+  {
+    name: "chat-service",
+    url:
+      `${process.env.CHAT_SERVICE_URL}/health` ||
+      "http://localhost:3007/health",
+  },
 ];
 
 const PING_INTERVAL_MS = 30_000;
@@ -40,8 +58,11 @@ const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
 const SERVICE_SEVERITY: Record<string, "critical" | "warning" | "info"> = {
   "user-service": "critical",
   "inventory-service": "critical",
+  "payment-service": "critical",
   "mail-service": "info",
   "activity-service": "warning",
+  "promotion-service": "warning",
+  "chat-service": "warning",
 };
 
 interface ServiceStatus {
@@ -112,8 +133,11 @@ async function sendSlackAlert(
   const impact: Record<string, string> = {
     "user-service": "Người dùng KHÔNG thể đăng nhập / đăng ký",
     "inventory-service": "Buyer KHÔNG thể xem / mua hàng",
+    "payment-service": "Thanh toán KHÔNG thể thực hiện",
     "mail-service": "Email OTP và thông báo bị gián đoạn",
     "activity-service": "Gợi ý sản phẩm tạm dừng — mua hàng vẫn OK",
+    "promotion-service": "Mã giảm giá / khuyến mãi không áp dụng được",
+    "chat-service": "Chat real-time bị gián đoạn",
   };
 
   const payload = {

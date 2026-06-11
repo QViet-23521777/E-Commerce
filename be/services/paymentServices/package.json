@@ -14,8 +14,10 @@
   "type": "commonjs",
   "dependencies": {
     "@hono/node-server": "^1.19.11",
+    "@types/jsonwebtoken": "^9.0.10",
     "dotenv": "^17.2.4",
     "hono": "^4.12.9",
+    "jsonwebtoken": "^9.0.3",
     "kafkajs": "^2.2.4",
     "mongoose": "^9.2.0"
   },
