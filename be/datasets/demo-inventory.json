@@ -1,0 +1,67 @@
+[
+  {
+    "_comment": "Import vào ecommerce_inventory.inventories. productId trỏ vào products đã có sẵn trong DB.",
+    "_id": { "$oid": "6b400000000000000000001a" },
+    "name": "green crystal earring",
+    "sellerId": { "$oid": "6a1b0c9a67dea6f28e89a333" },
+    "productId": { "$oid": "6a34b5b27c69f710f078e21b" },
+    "quantity": 80,
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" }
+  },
+  {
+    "_id": { "$oid": "6b400000000000000000002a" },
+    "name": "green oval earring",
+    "sellerId": { "$oid": "6a1b0c9a67dea6f28e89a333" },
+    "productId": { "$oid": "6a34b5b27c69f710f078e21c" },
+    "quantity": 60,
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" }
+  },
+  {
+    "_id": { "$oid": "6b400000000000000000003a" },
+    "name": "tropical earring",
+    "sellerId": { "$oid": "6a1b0c9a67dea6f28e89a333" },
+    "productId": { "$oid": "6a34b5b27c69f710f078e21d" },
+    "quantity": 45,
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" }
+  },
+  {
+    "_id": { "$oid": "6b400000000000000000004a" },
+    "name": "calvin klein heel shoes",
+    "sellerId": { "$oid": "6a1b0c9a67dea6f28e89a333" },
+    "productId": { "$oid": "6a34b5b27c69f710f078e21f" },
+    "quantity": 20,
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" }
+  },
+  {
+    "_comment": "Velvet Warehouse → Shoes + cross-sell earring",
+    "_id": { "$oid": "6b400000000000000000005a" },
+    "name": "black & brown slipper",
+    "sellerId": { "$oid": "6a1b0c9a67dea6f28e89a33f" },
+    "productId": { "$oid": "6a34b5b27c69f710f078e21e" },
+    "quantity": 90,
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" }
+  },
+  {
+    "_id": { "$oid": "6b400000000000000000006a" },
+    "name": "calvin klein heel shoes",
+    "sellerId": { "$oid": "6a1b0c9a67dea6f28e89a33f" },
+    "productId": { "$oid": "6a34b5b27c69f710f078e21f" },
+    "quantity": 55,
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" }
+  },
+  {
+    "_id": { "$oid": "6b400000000000000000007a" },
+    "name": "green crystal earring",
+    "sellerId": { "$oid": "6a1b0c9a67dea6f28e89a33f" },
+    "productId": { "$oid": "6a34b5b27c69f710f078e21b" },
+    "quantity": 30,
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" }
+  }
+]

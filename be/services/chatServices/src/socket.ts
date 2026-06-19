@@ -1,5 +1,7 @@
 import { Server } from "socket.io";
 import type { Server as HttpServer } from "http";
+import jwt from "jsonwebtoken";
+import { config } from "./config";
 
 let io: Server;
 
@@ -11,24 +13,36 @@ export function initSocket(httpServer: HttpServer): Server {
     },
   });
 
-  io.on("connection", (socket) => {
-    const userId = socket.handshake.headers["x-user-id"] as string | undefined;
+  // Verify JWT before allowing connection — prevents userId spoofing
+  io.use((socket, next) => {
+    const raw =
+      (socket.handshake.auth?.token as string | undefined) ||
+      (socket.handshake.headers["authorization"] as string | undefined);
 
-    if (!userId) {
-      socket.disconnect(true);
-      return;
+    if (!raw) return next(new Error("Authentication required"));
+
+    const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
+
+    try {
+      const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
+      socket.data.userId = decoded.userId;
+      next();
+    } catch {
+      next(new Error("Invalid token"));
     }
+  });
+
+  io.on("connection", (socket) => {
+    const userId = socket.data.userId as string;
     socket.join(userId);
     console.log(`[WS] connected: ${userId}`);
 
     socket.on("join_conversation", (conversationId: string) => {
       socket.join(conversationId);
-      console.log(`Socket ${socket.id} joined conversation ${conversationId}`);
     });
 
     socket.on("leave_conversation", (conversationId: string) => {
       socket.leave(conversationId);
-      console.log(`Socket ${socket.id} left conversation ${conversationId}`);
     });
 
     socket.on("disconnect", () => {

@@ -1,5 +1,6 @@
+import { io, Socket } from "socket.io-client";
 import { apiRequest } from "./api";
-import { getUser } from "./auth";
+import { getUser, getAccessToken } from "./auth";
 
 export type ChatPerspective = "buyer" | "shop";
 
@@ -84,6 +85,58 @@ export async function markRead(conversationId: string): Promise<void> {
   await apiRequest(`/api/chat/conversations/${conversationId}/read`, {
     method: "POST",
   });
+}
+
+// --- Socket.IO realtime ---
+
+let socket: Socket | null = null;
+
+export function connectChatSocket(): Socket | null {
+  if (typeof window === "undefined") return null;
+  const token = getAccessToken();
+  if (!token || socket?.connected) return socket;
+
+  const url = process.env.NEXT_PUBLIC_CHAT_WS_URL || "http://localhost:3007";
+  socket = io(url, {
+    auth: { token: `Bearer ${token}` },
+    transports: ["websocket"],
+    reconnectionAttempts: 5,
+  });
+
+  socket.on("connect_error", (err) => {
+    console.error("[WS] connect error:", err.message);
+  });
+
+  return socket;
+}
+
+export function disconnectChatSocket() {
+  socket?.disconnect();
+  socket = null;
+}
+
+export function getChatSocket(): Socket | null {
+  return socket;
+}
+
+export function joinConversation(conversationId: string) {
+  socket?.emit("join_conversation", conversationId);
+}
+
+export function leaveConversation(conversationId: string) {
+  socket?.emit("leave_conversation", conversationId);
+}
+
+export function onNewMessage(cb: (msg: ChatMessage) => void): () => void {
+  socket?.on("new_message", cb);
+  return () => { socket?.off("new_message", cb); };
+}
+
+export function onNewConversationMessage(
+  cb: (payload: { conversationId: string; message: ChatMessage }) => void,
+): () => void {
+  socket?.on("new_conversation_message", cb);
+  return () => { socket?.off("new_conversation_message", cb); };
 }
 
 // --- pub-sub: lets a product page pop the global ChatWidget open to a shop ---

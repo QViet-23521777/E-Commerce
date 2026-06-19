@@ -4,4 +4,5 @@ dotenv.config();
 export const config = {
   port: process.env.PORT || 3007,
   mongoUri: process.env.MONGODB_URI || "mongodb://localhost:27017/chat",
+  jwtSecret: process.env.JWT_SECRET || "",
 };

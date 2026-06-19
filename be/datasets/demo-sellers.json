@@ -1,0 +1,29 @@
+[
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a333",
+    "name": "Golden Bazaar",
+    "email": "shop02@seed.shop",
+    "password": "Seed1234!",
+    "address": "17 Nguyen Hue, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop02%40seed.shop",
+    "sells": [
+      "Green Crystal Earring",
+      "Green Oval Earring",
+      "Tropical Earring",
+      "Calvin Klein Heel Shoes"
+    ]
+  },
+  {
+    "sellerId": "6a1b0c9a67dea6f28e89a33f",
+    "name": "Velvet Warehouse",
+    "email": "shop05@seed.shop",
+    "password": "Seed1234!",
+    "address": "38 Dong Khoi, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop05%40seed.shop",
+    "sells": [
+      "Black & Brown Slipper",
+      "Calvin Klein Heel Shoes",
+      "Green Crystal Earring"
+    ]
+  }
+]

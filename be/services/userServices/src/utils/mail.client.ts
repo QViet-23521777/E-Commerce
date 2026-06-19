@@ -1,17 +1,31 @@
-import amqplib from "amqplib";
+import { Kafka, Producer, logLevel } from "kafkajs";
 
-const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://localhost:5672";
+const kafka = new Kafka({
+  clientId: "user-service-mail-producer",
+  brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
+  logLevel: logLevel.WARN,
+});
 
-async function publish(pattern: string, data: object): Promise<void> {
-  const conn = await amqplib.connect(RABBITMQ_URL);
-  const channel = await conn.createChannel();
-  await channel.assertQueue("mail_queue", { durable: true });
+let producer: Producer | null = null;
 
-  const message = JSON.stringify({ pattern, data });
-  channel.sendToQueue("mail_queue", Buffer.from(message), { persistent: true });
+async function getProducer(): Promise<Producer> {
+  if (!producer) {
+    producer = kafka.producer();
+    await producer.connect();
+  }
+  return producer;
+}
 
-  await channel.close();
-  await conn.close();
+async function publish(topic: string, data: object): Promise<void> {
+  try {
+    const p = await getProducer();
+    await p.send({
+      topic,
+      messages: [{ value: JSON.stringify(data) }],
+    });
+  } catch (err) {
+    console.error(`[MailClient] Failed to publish to topic "${topic}":`, err);
+  }
 }
 
 export const mailClient = {

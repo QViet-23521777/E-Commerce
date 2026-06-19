@@ -33,6 +33,7 @@ services:
     env_file: ./services/userServices/.env.docker
     depends_on:
       - mongodb
+      - kafka
     networks:
       - ecommerce-net
     restart: on-failure
@@ -71,6 +72,8 @@ services:
   chat-service:
     build: ./services/chatServices
     env_file: ./services/chatServices/.env.docker
+    ports:
+      - "3007:3007"
     depends_on:
       - mongodb
     networks:
@@ -112,6 +115,8 @@ services:
     ports:
       - "3002:3002"
     env_file: ./services/mailServices/.env.docker
+    depends_on:
+      - kafka
     networks:
       - ecommerce-net
     restart: on-failure

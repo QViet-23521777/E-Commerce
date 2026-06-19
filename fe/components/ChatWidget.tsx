@@ -17,11 +17,15 @@ import {
   subscribeOpenChat,
   chatInitials,
   chatTimeLabel,
+  connectChatSocket,
+  disconnectChatSocket,
+  joinConversation,
+  leaveConversation,
+  onNewMessage,
+  onNewConversationMessage,
 } from "@/lib/chat";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
-const CONV_POLL_MS = 10000;
-const MSG_POLL_MS = 4000;
 
 export default function ChatWidget() {
   const [open, setOpen] = useState(false);
@@ -57,12 +61,12 @@ export default function ChatWidget() {
     }
   }, []);
 
-  // Poll the conversation list while the widget is open.
+  // Kết nối socket và load conversations khi mở widget.
   useEffect(() => {
     if (!open || !loggedIn) return;
     refreshConversations();
-    const iv = setInterval(refreshConversations, CONV_POLL_MS);
-    return () => clearInterval(iv);
+    connectChatSocket();
+    return () => disconnectChatSocket();
   }, [open, loggedIn, refreshConversations]);
 
   const openConversation = useCallback(
@@ -83,28 +87,32 @@ export default function ChatWidget() {
     [],
   );
 
-  // Poll the open thread for new messages.
+  // Join/leave conversation room và lắng nghe tin nhắn realtime.
   useEffect(() => {
     if (!activeId || !open) return;
-    const tick = async () => {
-      const last = messagesRef.current[messagesRef.current.length - 1]?.id;
-      try {
-        const newer = await getMessages(activeId, last);
-        if (newer.length) {
-          setMessages((prev) => {
-            const seen = new Set(prev.map((m) => m.id));
-            return [...prev, ...newer.filter((m) => !seen.has(m.id))];
-          });
-          markRead(activeId).catch(() => {});
-          refreshConversations();
-        }
-      } catch {
-        /* ignore transient poll errors */
-      }
+    joinConversation(activeId);
+
+    const unsubMsg = onNewMessage((msg) => {
+      setMessages((prev) =>
+        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+      );
+      markRead(activeId).catch(() => {});
+    });
+
+    return () => {
+      leaveConversation(activeId);
+      unsubMsg();
     };
-    const iv = setInterval(tick, MSG_POLL_MS);
-    return () => clearInterval(iv);
-  }, [activeId, open, refreshConversations]);
+  }, [activeId, open]);
+
+  // Lắng nghe tin nhắn từ các conversation khác để cập nhật unread badge.
+  useEffect(() => {
+    if (!open || !loggedIn) return;
+    const unsubConv = onNewConversationMessage(() => {
+      refreshConversations();
+    });
+    return () => unsubConv();
+  }, [open, loggedIn, refreshConversations]);
 
   // Product page → open the widget to a specific shop (existing thread or draft).
   useEffect(() => {

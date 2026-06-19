@@ -11,11 +11,15 @@ async function bootstrap(): Promise<void> {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.RMQ,
+    transport: Transport.KAFKA,
     options: {
-      urls: [process.env.RABBITMQ_URL || "amqp://localhost:5672"],
-      queue: "mail_queue",
-      queueOptions: { durable: true },
+      client: {
+        clientId: "mail-service",
+        brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
+      },
+      consumer: {
+        groupId: "mail-service-consumer",
+      },
     },
   });
 
@@ -23,7 +27,7 @@ async function bootstrap(): Promise<void> {
   logger.log("Mail Service running on port 3002");
 
   app.startAllMicroservices().catch(() => {
-    logger.warn("RabbitMQ not available, running HTTP only");
+    logger.warn("Kafka not available, running HTTP only");
   });
 }
 

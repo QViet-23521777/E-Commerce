@@ -1,8 +1,7 @@
 import { User } from "../models/user.model";
 import { Role } from "../models/role.model";
-import crypto from "crypto";
+import { randomInt, createHash } from "crypto";
 import { JwtService } from "../utils/jwt.service";
-import { Jwt } from "hono/utils/jwt";
 interface CreateSellerInput {
   userId: string;
   address: string;
@@ -26,8 +25,8 @@ export const createSellerAccount = async ({
   if (!address) throw new Error("ADDRESS_REQUIRED");
   if (!phone) throw new Error("PHONE_REQUIRED");
 
-  const otp = crypto.randomInt(100000, 999999).toString();
-  user.otp = otp;
+  const otp = randomInt(100000, 999999).toString();
+  user.otp = createHash("sha256").update(otp).digest("hex");
   await user.save();
   return { user, otp };
 };
@@ -35,7 +34,8 @@ export const createSellerAccount = async ({
 export const verifySeller = async (userId: string, otp: string) => {
   const user = await User.findById(userId);
   if (!user) throw new Error("USER_NOT_FOUND");
-  if (user.otp !== otp) throw new Error("INVALID_OTP");
+  const hashedInput = createHash("sha256").update(otp).digest("hex");
+  if (hashedInput !== user.otp) throw new Error("INVALID_OTP");
 
   user.roleId = (await Role.findOne({ name: "seller" }))!._id;
   user.otp = undefined;
