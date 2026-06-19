@@ -93,16 +93,16 @@ export default function Navbar() {
                   {user.name ?? user.email.split("@")[0]}
                 </span>
               </button>
-              <div className="absolute right-0 top-full mt-1 bg-white border-2 border-deep-navy rounded-xl shadow-sm py-1 w-44 hidden group-focus-within:block group-hover:block z-50">
+              <div className="absolute right-0 top-full mt-1 bg-white border-2 border-deep-navy rounded-xl shadow-sm w-44 hidden group-focus-within:block group-hover:block z-50 overflow-hidden">
                 <Link
                   href="/profile"
-                  className="block px-4 py-2 text-sm font-medium text-deep-navy hover:bg-surface-container"
+                  className="block px-4 py-2.5 text-sm font-medium text-deep-navy hover:bg-surface-container"
                 >
                   My Profile
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 hover:bg-surface-container flex items-center gap-2"
+                  className="w-full text-left px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-surface-container flex items-center gap-2"
                 >
                   <LogOut className="w-4 h-4" /> Sign Out
                 </button>
