@@ -13,6 +13,69 @@ const track = {
   newness: 15,
 };
 
+const categoryMap: Record<string, string[]> = {
+  "Electronics": ["Mobiles & Accessories", "Computers", "Cameras & Accessories", "Gaming", "Home Entertainment", "Health & Personal Care Appliances", "smartphones", "mobile-accessories", "laptops", "tablets"],
+  "Fashion": ["Clothing", "Jewellery", "Footwear", "Watches", "Bags, Wallets & Belts", "Sunglasses", "Eyewear", "mens-watches", "mens-shirts", "mens-shoes", "sunglasses", "tops", "womens-bags", "womens-dresses", "womens-shoes", "womens-watches", "womens-jewellery"],
+  "Food & Grocery": ["groceries", "fragrances"],
+  "Home & Living": ["Home Decor & Festive Needs", "Home Furnishing", "Kitchen & Dining", "Tools & Hardware", "Furniture", "Home Improvement", "kitchen-accessories", "Home & Kitchen", "furniture", "home-decoration"],
+  "Health & Beauty": ["Beauty and Personal Care", "Health & Personal Care Appliances", "beauty", "skin-care"],
+  "Sports": ["Sports & Fitness", "sports-accessories"],
+  "Books": ["Pens & Stationery", "eBooks"],
+  "Toys & Baby": ["Baby Care", "Toys & School Supplies"],
+  "Automotive": ["Automotive", "motorcycle", "vehicle"],
+  "Pet Supplies": ["Pet Supplies"],
+};
+
+const categoryKeywords: Record<string, string[]> = {
+  "Electronics": ["phone", "laptop", "tablet", "camera", "gaming", "computer", "monitor",
+                  "dien thoai", "may tinh", "man hinh", "tai nghe", "sac"],
+  "Fashion": ["shirt", "dress", "shoe", "watch", "bag", "jewellery", "clothing",
+              "ao", "quan", "giay", "dep", "tui", "dong ho", "vong"],
+  "Food & Grocery": ["food", "grocery", "snack", "drink", "fragrance",
+                     "thuc pham", "do uong", "banh", "nuoc hoa"],
+  "Home & Living": ["furniture", "decor", "kitchen", "tool", "hardware",
+                    "noi that", "ban ghe", "bep", "trang tri"],
+  "Health & Beauty": ["beauty", "skin", "hair", "health", "cosmetic",
+                      "my pham", "duong da", "son", "kem"],
+  "Sports": ["sport", "fitness", "gym", "exercise",
+             "the thao", "tap gym", "bong"],
+  "Books": ["book", "pen", "stationery",
+            "sach", "but", "vo"],
+  "Toys & Baby": ["toy", "baby", "child",
+                  "do choi", "tre em", "em be"],
+  "Automotive": ["car", "motorcycle", "vehicle",
+                 "xe hoi", "xe may", "o to"],
+  "Pet Supplies": ["pet", "dog", "cat",
+                   "thu cung", "cho", "meo"],
+};
+
+const reverseCategoryMap: Record<string, string> = Object.entries(categoryMap).reduce(
+  (acc, [cat, types]) => { types.forEach((t) => (acc[t] = cat)); return acc; },
+  {} as Record<string, string>,
+);
+
+export const resolveTypes = (typeOrCategory: string): string[] => {
+  const normalized = typeOrCategory.trim().toLowerCase();
+
+  const exactCategory = categoryMap[typeOrCategory];
+  if (exactCategory) return exactCategory;
+
+  const caseInsensitiveCategory = Object.keys(categoryMap).find(
+    (k) => k.toLowerCase() === normalized,
+  );
+  if (caseInsensitiveCategory) return categoryMap[caseInsensitiveCategory];
+
+  const exactSubType = reverseCategoryMap[typeOrCategory];
+  if (exactSubType) return categoryMap[exactSubType];
+
+  const caseInsensitiveSubType = Object.keys(reverseCategoryMap).find(
+    (k) => k.toLowerCase() === normalized,
+  );
+  if (caseInsensitiveSubType) return categoryMap[reverseCategoryMap[caseInsensitiveSubType]];
+
+  return [typeOrCategory];
+};
+
 const computeTrack = (item: PProduct): number => {
   const ageInDays =
     item.createdAt
@@ -224,16 +287,27 @@ export const getTopPoint = async (
 export const getTopByType = async (
   limit: number = 10,
   lastId: string,
-  type: string,
+  typeInput: string | string[],
 ) => {
+  const types = Array.isArray(typeInput) ? typeInput : resolveTypes(typeInput);
   const ownedIds = await getOwnedProductIds();
   const idFilter: Record<string, unknown> = { $in: ownedIds };
   if (lastId) idFilter.$gt = lastId;
+
+  const category = reverseCategoryMap[types[0]] ?? types[0];
+  const keywords = categoryKeywords[category] ?? [];
+
+  const typeFilter: Record<string, unknown>[] = [{ type: { $in: types } }];
+  if (keywords.length > 0) {
+    typeFilter.push({ normalize: { $regex: keywords.join("|"), $options: "i" } });
+  }
+
   const query: Record<string, unknown> = {
-    type,
     status: "approved",
     _id: idFilter,
+    $or: typeFilter,
   };
+
   const items = await Product.find(query)
     .sort({ sale: -1, numPurchases: -1, point: -1, _id: 1 })
     .limit(limit);
@@ -247,24 +321,16 @@ export const getTopByType = async (
   };
 };
 
-export const getTopByListType = async (limit: number = 5, types: string[]) => {
-  const listItemsMap = new Map<string, PProduct>();
+export const getTopByListType = async (limit: number = 5, categories: string[]) => {
+  const allTypes = [...new Set(categories.flatMap(resolveTypes))];
+  const { items } = await getTopByType(limit, "", allTypes);
 
-  for (const t of types) {
-    const { items } = await getTopByType(limit, "", t);
-    for (const item of items) {
-      const id = item._id.toString();
-      if (!listItemsMap.has(id)) listItemsMap.set(id, item);
-    }
-  }
-
-  const listItems = [...listItemsMap.values()];
-  for (const item of listItems) {
+  for (const item of items) {
     item.track = computeTrack(item);
   }
-  listItems.sort((a, b) => (b.track ?? 0) - (a.track ?? 0));
+  items.sort((a, b) => (b.track ?? 0) - (a.track ?? 0));
 
-  return { listItems: listItems.slice(0, limit) };
+  return { listItems: items.slice(0, limit) };
 };
 
 export const findProduct = async (
@@ -451,7 +517,7 @@ export const trackRecommendation = async (data: {
       (activity === "view" || activity === "click" || activity === "search") &&
       type
     ) {
-      const result = await getTopByType(2, lastTopByTypeId, type);
+      const result = await getTopByType(2, lastTopByTypeId, resolveTypes(type));
       console.log(`Top products for type "${type}":`, result);
 
       const lastItem = result.items[result.items.length - 1];

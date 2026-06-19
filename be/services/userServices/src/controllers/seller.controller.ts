@@ -30,6 +30,7 @@ export const createSeller = async (c: Context) => {
     const { user, otp } = await createSellerAccount({ userId, address, phone });
     mailClient.sendSellerAccountVerificationEmail(
       user.email,
+      user.name,
       otp,
       new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     );

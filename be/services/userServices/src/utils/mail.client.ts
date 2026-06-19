@@ -49,9 +49,10 @@ export const mailClient = {
 
   sendSellerAccountVerificationEmail: (
     email: string,
+    name: string,
     otp: string,
     expiredAt: string,
-  ) => publish("send_seller_account_verification_email", { email, otp, expiredAt }),
+  ) => publish("send_seller_account_verification_email", { email, name, otp, expiredAt }),
 
   sendAdminAccountVerificationEmail: (
     email: string,

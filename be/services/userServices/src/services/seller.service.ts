@@ -25,7 +25,7 @@ export const createSellerAccount = async ({
   if (!address) throw new Error("ADDRESS_REQUIRED");
   if (!phone) throw new Error("PHONE_REQUIRED");
 
-  const otp = randomInt(100000, 999999).toString();
+  const otp = randomInt(100000, 1000000).toString();
   user.otp = createHash("sha256").update(otp).digest("hex");
   await user.save();
   return { user, otp };
@@ -39,7 +39,7 @@ export const verifySeller = async (userId: string, otp: string) => {
 
   user.roleId = (await Role.findOne({ name: "seller" }))!._id;
   user.otp = undefined;
-  const tokens = await JwtService.generateTokenPair({
+  const tokens = JwtService.generateTokenPair({
     userId: user._id.toString(),
     email: user.email,
     role: "seller",

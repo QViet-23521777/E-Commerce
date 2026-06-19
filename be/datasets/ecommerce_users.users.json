@@ -1,51 +1,136 @@
-[{
-  "_id": {
-    "$oid": "6a22edeb1ffd52c87f7663d8"
+[
+  {
+    "_id": { "$oid": "6a22edeb1ffd52c87f7663d8" },
+    "name": "test user",
+    "email": "maithanhvinh090872@gmail.com",
+    "password": "$argon2id$v=19$m=65536,t=3,p=4$Yy6NU/td2qm1ttNDAjYOlw$HTggQEJNW+vyabe4aggCaBU1ZycInygiCop1+uM6mS8",
+    "roleId": { "$oid": "6a22ede808641f6f3acf7249" },
+    "isActive": true,
+    "isVerified": true,
+    "twoFactorEnabled": true,
+    "preferences": [],
+    "searchHistory": [],
+    "productId": [],
+    "createdAt": { "$date": "2026-06-05T15:40:27.442Z" },
+    "updatedAt": { "$date": "2026-06-05T15:50:07.793Z" },
+    "__v": 0
   },
-  "name": "test user",
-  "email": "maithanhvinh090872@gmail.com",
-  "password": "$argon2id$v=19$m=65536,t=3,p=4$Yy6NU/td2qm1ttNDAjYOlw$HTggQEJNW+vyabe4aggCaBU1ZycInygiCop1+uM6mS8",
-  "roleId": {
-    "$oid": "6a22ede808641f6f3acf7249"
+  {
+    "_id": { "$oid": "6a22f9801ffd52c87f7663ee" },
+    "name": "test user",
+    "email": "mh2116744@gmail.com",
+    "password": "$argon2id$v=19$m=65536,t=3,p=4$vJhGDS07zcKjGMi1CZ9lgg$9cI5dmOfLjkVDjxZJ9nOo5d+XYaUI2tGxh+mFnRyvEU",
+    "roleId": { "$oid": "6a22ede808641f6f3acf7248" },
+    "isActive": true,
+    "isVerified": true,
+    "twoFactorEnabled": true,
+    "preferences": [],
+    "searchHistory": [],
+    "productId": [],
+    "createdAt": { "$date": "2026-06-05T16:29:52.629Z" },
+    "updatedAt": { "$date": "2026-06-05T16:31:37.786Z" },
+    "__v": 0
   },
-  "isActive": true,
-  "isVerified": true,
-  "twoFactorEnabled": true,
-  "preferences": [],
-  "searchHistory": [],
-  "productId": [],
-  "createdAt": {
-    "$date": "2026-06-05T15:40:27.442Z"
+  {
+    "_id": { "$oid": "6a1b0c9a67dea6f28e89a333" },
+    "name": "golden bazaar",
+    "email": "shop02@seed.shop",
+    "password": "$argon2id$v=19$m=65536,t=3,p=4$aYDom/Px5lv3oBHpzVCPqQ$NlrtVSWaSBrE6v5Q1PVNGweBhwjleJXtQ3tNE6EkS+0",
+    "roleId": { "$oid": "6a22ede808641f6f3acf7249" },
+    "isActive": true,
+    "isVerified": true,
+    "twoFactorEnabled": false,
+    "address": "17 Nguyen Hue, Hoan Kiem, Hanoi",
+    "avatar": "https://i.pravatar.cc/150?u=shop02%40seed.shop",
+    "phone": "0902001333",
+    "preferences": [],
+    "searchHistory": [],
+    "productId": [],
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "__v": 0
   },
-  "updatedAt": {
-    "$date": "2026-06-05T15:50:07.793Z"
+  {
+    "_id": { "$oid": "6a1b0c9a67dea6f28e89a33f" },
+    "name": "velvet warehouse",
+    "email": "shop05@seed.shop",
+    "password": "$argon2id$v=19$m=65536,t=3,p=4$aYDom/Px5lv3oBHpzVCPqQ$NlrtVSWaSBrE6v5Q1PVNGweBhwjleJXtQ3tNE6EkS+0",
+    "roleId": { "$oid": "6a22ede808641f6f3acf7249" },
+    "isActive": true,
+    "isVerified": true,
+    "twoFactorEnabled": false,
+    "address": "38 Dong Khoi, Le Chan, Hai Phong",
+    "avatar": "https://i.pravatar.cc/150?u=shop05%40seed.shop",
+    "phone": "0905001333",
+    "preferences": [],
+    "searchHistory": [],
+    "productId": [],
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "__v": 0
   },
-  "__v": 0,
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTIyZWRlYjFmZmQ1MmM4N2Y3NjYzZDgiLCJlbWFpbCI6Im1haXRoYW5odmluaDA5MDg3MkBnbWFpbC5jb20iLCJyb2xlIjoic2VsbGVyIiwiaWF0IjoxNzgwNjc0NjA3LCJleHAiOjE3ODEyNzk0MDd9.gCTipbUsbauFqyfS6vmpoh7nWuIoIb20lMGC_FpvxvQ"
-},
-{
-  "_id": {
-    "$oid": "6a22f9801ffd52c87f7663ee"
+  {
+    "_id": { "$oid": "6c100000000000000000001a" },
+    "name": "nguyen van a",
+    "email": "buyer01@demo.test",
+    "password": "$argon2id$v=19$m=65536,t=3,p=4$cHYzVIpaFHvEj7+seFk/IQ$OnblmLb+EkTup3cB9LFo9Q9f3tqM/d5KuLFgTV4brcA",
+    "roleId": { "$oid": "6a22ede808641f6f3acf7248" },
+    "isActive": true,
+    "isVerified": true,
+    "twoFactorEnabled": false,
+    "preferences": [],
+    "searchHistory": [],
+    "productId": [],
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "__v": 0
   },
-  "name": "test user",
-  "email": "mh2116744@gmail.com",
-  "password": "$argon2id$v=19$m=65536,t=3,p=4$vJhGDS07zcKjGMi1CZ9lgg$9cI5dmOfLjkVDjxZJ9nOo5d+XYaUI2tGxh+mFnRyvEU",
-  "roleId": {
-    "$oid": "6a22ede808641f6f3acf7248"
+  {
+    "_id": { "$oid": "6c100000000000000000002a" },
+    "name": "tran thi b",
+    "email": "buyer02@demo.test",
+    "password": "$argon2id$v=19$m=65536,t=3,p=4$cHYzVIpaFHvEj7+seFk/IQ$OnblmLb+EkTup3cB9LFo9Q9f3tqM/d5KuLFgTV4brcA",
+    "roleId": { "$oid": "6a22ede808641f6f3acf7248" },
+    "isActive": true,
+    "isVerified": true,
+    "twoFactorEnabled": false,
+    "preferences": [],
+    "searchHistory": [],
+    "productId": [],
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "__v": 0
   },
-  "isActive": true,
-  "isVerified": true,
-  "twoFactorEnabled": true,
-  "preferences": [],
-  "searchHistory": [],
-  "productId": [],
-  "createdAt": {
-    "$date": "2026-06-05T16:29:52.629Z"
+  {
+    "_id": { "$oid": "6c100000000000000000003a" },
+    "name": "le van c",
+    "email": "buyer03@demo.test",
+    "password": "$argon2id$v=19$m=65536,t=3,p=4$cHYzVIpaFHvEj7+seFk/IQ$OnblmLb+EkTup3cB9LFo9Q9f3tqM/d5KuLFgTV4brcA",
+    "roleId": { "$oid": "6a22ede808641f6f3acf7248" },
+    "isActive": true,
+    "isVerified": true,
+    "twoFactorEnabled": false,
+    "preferences": [],
+    "searchHistory": [],
+    "productId": [],
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "__v": 0
   },
-  "updatedAt": {
-    "$date": "2026-06-05T16:31:37.786Z"
-  },
-  "__v": 0,
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YTIyZjk4MDFmZmQ1MmM4N2Y3NjYzZWUiLCJlbWFpbCI6Im1oMjExNjc0NEBnbWFpbC5jb20iLCJyb2xlIjoidXNlciIsImlhdCI6MTc4MDY3NzA5NywiZXhwIjoxNzgxMjgxODk3fQ.I5EbQ41s75wr1Eda64yLNrb66R09hn3Cu6H4nrRNZrw",
-  "otp": "b28e65347a4d407535bffc9abe3879344d37f915a0ea6747866674ec6bb4ab6b"
-}]
+  {
+    "_id": { "$oid": "6a34cb0e1075babc9249272a" },
+    "name": "23521777",
+    "email": "23521777@gm.uit.edu.vn",
+    "password": "$argon2id$v=19$m=65536,t=3,p=4$cHYzVIpaFHvEj7+seFk/IQ$OnblmLb+EkTup3cB9LFo9Q9f3tqM/d5KuLFgTV4brcA",
+    "roleId": { "$oid": "6a22ede808641f6f3acf7248" },
+    "isActive": true,
+    "isVerified": true,
+    "twoFactorEnabled": false,
+    "preferences": [],
+    "searchHistory": [],
+    "productId": [],
+    "createdAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "updatedAt": { "$date": "2026-06-19T00:00:00.000Z" },
+    "__v": 0
+  }
+]
