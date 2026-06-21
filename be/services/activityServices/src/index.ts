@@ -60,6 +60,7 @@ mongoose
         userId: data.userId,
         activity: data.activity as "buy",
         productId: data.productId,
+        inventoryId: data.inventoryId,
       });
     });
     const FLUSH_THRESHOLD_MS = 2 * 60 * 1000;

@@ -49,8 +49,29 @@ class KafkaConsumerService {
           const productScores = new Map<string, number>();
           const activityTypes = new Set<string>();
 
+          // Resolve inventoryId → productId cho các event chỉ có inventoryId
+          const invIds = [
+            ...new Set(
+              events
+                .filter((e) => e.inventoryId && !e.productId)
+                .map((e) => e.inventoryId as string),
+            ),
+          ];
+          const invToProductMap = new Map<string, string>();
+          if (invIds.length > 0) {
+            const inventories = await Inventory.find(
+              { _id: { $in: invIds } },
+              { productId: 1 },
+            );
+            for (const inv of inventories) {
+              invToProductMap.set(inv._id.toString(), inv.productId.toString());
+            }
+          }
+
           for (const event of events) {
-            const { productId, activity, timestamp } = event;
+            const { activity, timestamp } = event;
+            const productId = event.productId
+              ?? (event.inventoryId ? invToProductMap.get(event.inventoryId) : undefined);
             if (activity) activityTypes.add(activity);
             if (!productId) continue;
             const weight =

@@ -59,7 +59,8 @@ class KafkaService {
     handler: (data: {
       userId: string;
       activity: string;
-      productId: string;
+      productId?: string;
+      inventoryId?: string;
     }) => Promise<void>,
   ): Promise<void> {
     const topic = process.env.KAFKA_ACTIVITY_TOPIC || "payment.activity";
