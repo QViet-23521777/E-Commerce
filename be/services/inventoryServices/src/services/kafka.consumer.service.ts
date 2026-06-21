@@ -1,6 +1,8 @@
 import { Kafka, Consumer, logLevel } from "kafkajs";
 import { config } from "../config";
 import { redisService } from "./redis.service";
+import Inventory from "../models/inventory.model";
+import { Product } from "../models/product.model";
 
 const ACTIVITY_WEIGHT = {
   view: 1,
@@ -84,6 +86,40 @@ class KafkaConsumerService {
           );
         } catch (error) {
           console.error("❌ Kafka message error:", error);
+        }
+      },
+    });
+
+    // ─── payment.completed → cập nhật numSales + numPurchases ───
+    const salesConsumer = this.kafka.consumer({ groupId: "inventory-sales-group" });
+    await salesConsumer.connect();
+    await salesConsumer.subscribe({
+      topic: process.env.KAFKA_PAYMENT_COMPLETED_TOPIC || "payment.completed",
+      fromBeginning: false,
+    });
+    await salesConsumer.run({
+      eachMessage: async ({ message }) => {
+        try {
+          const item = JSON.parse(message.value?.toString() || "{}") as {
+            inventoryId: string;
+            productId?: string | null;
+            quantity: number;
+          };
+          if (!item.inventoryId || !item.quantity) return;
+
+          await Inventory.findByIdAndUpdate(
+            item.inventoryId,
+            { $inc: { numSales: item.quantity } },
+          );
+
+          if (item.productId) {
+            await Product.findByIdAndUpdate(
+              item.productId,
+              { $inc: { numPurchases: item.quantity } },
+            );
+          }
+        } catch (error) {
+          console.error("❌ Sales event error:", error);
         }
       },
     });

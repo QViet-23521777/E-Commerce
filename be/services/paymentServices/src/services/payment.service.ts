@@ -6,10 +6,10 @@ import {
   verifyMomoIpnSignature,
 } from "./momo.service";
 import { creditWallet, debitWallet } from "./wallet.service";
-import { publishActivityEvents } from "./kafka.producer";
+import { publishActivityEvents, publishSalesEvent } from "./kafka.producer";
 
 type CreatePaymentItemInput = {
-  productId: string;
+  inventoryId: string;
   quantity: number;
 };
 
@@ -54,10 +54,13 @@ const createRequestId = (): string => crypto.randomUUID();
 
 const recordBuyActivities = (
   userId: string,
-  items: { productId: string; quantity: number }[],
+  items: { inventoryId: string; productId?: string; quantity: number }[],
 ) => {
   publishActivityEvents(userId, items).catch((err) => {
     console.warn("[recordBuyActivities] Kafka publish failed, skipping", err);
+  });
+  publishSalesEvent(items).catch((err) => {
+    console.warn("[recordBuyActivities] Kafka sales publish failed, skipping", err);
   });
 };
 
@@ -187,7 +190,7 @@ const resolveItemsAndAmount = async (payload: CreatePaymentInput) => {
   }
 
   const inventory = await Promise.all(
-    payload.items.map((item) => fetchInventory(item.productId)),
+    payload.items.map((item) => fetchInventory(item.inventoryId)),
   );
 
   const items = payload.items.map((item, index) => {
@@ -202,16 +205,14 @@ const resolveItemsAndAmount = async (payload: CreatePaymentInput) => {
     });
 
     return {
-      productId: goods._id,
+      inventoryId: String(goods._id),
+      productId: goods.productId?._id ? String(goods.productId._id) : null,
       name: goods.name,
       quantity: item.quantity,
       unitPrice,
       totalPrice,
       sellerId: goods.sellerId ? String(goods.sellerId) : null,
       image: goods.productId?.imageUrl ?? null,
-      catalogProductId: goods.productId?._id
-        ? String(goods.productId._id)
-        : null,
     };
   });
 
@@ -462,8 +463,8 @@ export const processMomoIpn = async (payload: any) => {
     // Flow mua hàng trực tiếp → trừ tồn kho + ghi activity
     if (payment.items.length > 0 && !payment.inventoryDeducted) {
       await buyInventoryByList(
-        payment.items.map((item: { productId: string; quantity: number }) => ({
-          inventoryId: item.productId,
+        payment.items.map((item) => ({
+          inventoryId: item.inventoryId,
           quantity: item.quantity,
         })),
       );
@@ -526,7 +527,7 @@ export const checkoutWithWallet = async (
     try {
       await buyInventoryByList(
         items.map((item) => ({
-          inventoryId: item.productId,
+          inventoryId: item.inventoryId,
           quantity: item.quantity,
         })),
       );
@@ -733,8 +734,8 @@ export const cancelOrder = async (orderId: string, actorId: string) => {
       !payment.inventoryRestored
     ) {
       await restoreInventoryByList(
-        payment.items.map((item: { productId: string; quantity: number }) => ({
-          inventoryId: item.productId,
+        payment.items.map((item) => ({
+          inventoryId: item.inventoryId,
           quantity: item.quantity,
         })),
       );

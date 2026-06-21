@@ -3,8 +3,8 @@ export interface IInventory extends Document {
   name: string;
   sellerId: mongoose.Types.ObjectId;
   productId: mongoose.Types.ObjectId;
-  price: mongoose.Types.ObjectId;
   quantity: number;
+  numSales: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +23,7 @@ const inventorySchema = new mongoose.Schema<IInventory>(
       required: true,
     },
     quantity: { type: Number, required: true },
+    numSales: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

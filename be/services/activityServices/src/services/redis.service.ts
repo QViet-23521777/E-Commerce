@@ -6,6 +6,7 @@ export type ActivityType = "view" | "buy" | "search" | "click";
 export interface UserActivity {
   activity: ActivityType;
   productId?: string;
+  inventoryId?: string;
   keyword?: string;
   timestamp: number;
   count: number;

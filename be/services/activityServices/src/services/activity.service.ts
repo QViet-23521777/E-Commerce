@@ -108,6 +108,7 @@ export const addActivity = async (data: {
   userId: string;
   activity: ActivityType;
   productId?: string;
+  inventoryId?: string;
   keyword?: string;
   categoryId?: string;
   metadata?: Record<string, unknown>;
@@ -133,6 +134,7 @@ export const addActivity = async (data: {
   const event: UserActivity = {
     activity: data.activity,
     productId: data.productId,
+    inventoryId: data.inventoryId,
     keyword: data.keyword,
     timestamp: Date.now(),
     count: 0,

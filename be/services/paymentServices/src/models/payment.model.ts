@@ -1,14 +1,14 @@
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface IPaymentItem {
-  productId: string;
+  inventoryId: string;
+  productId?: string;
   name: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
   sellerId?: string;
   image?: string;
-  catalogProductId?: string;
 }
 
 export type FulfillmentStatus =
@@ -66,14 +66,14 @@ export interface IPayment extends Document {
 
 const PaymentItemSchema = new Schema<IPaymentItem>(
   {
-    productId: { type: String, required: true },
+    inventoryId: { type: String, required: true },
+    productId: { type: String, default: null },
     name: { type: String, required: true },
     quantity: { type: Number, required: true },
     unitPrice: { type: Number, required: true },
     totalPrice: { type: Number, required: true },
     sellerId: { type: String, default: null },
     image: { type: String, default: null },
-    catalogProductId: { type: String, default: null },
   },
   { _id: false },
 );

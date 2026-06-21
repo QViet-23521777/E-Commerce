@@ -19,7 +19,7 @@ export const createMomoPaymentController = async (c: Context) => {
       redirectUrl?: string;
       extraData?: string;
       lang?: string;
-      items?: Array<{ productId: string; quantity: number }>;
+      items?: Array<{ inventoryId: string; quantity: number }>;
       walletId?: string;
     };
     const payment = await createMomoPaymentSession(user.id, body);
@@ -50,7 +50,7 @@ export const walletCheckoutController = async (c: Context) => {
     const body = c.get("validatedBody") as {
       amount?: number;
       orderInfo?: string;
-      items?: Array<{ productId: string; quantity: number }>;
+      items?: Array<{ inventoryId: string; quantity: number }>;
     };
     const payment = await checkoutWithWallet(user.id, body);
 

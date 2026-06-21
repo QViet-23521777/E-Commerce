@@ -22,6 +22,7 @@ export const handleCreateProduct = async (c: Context) => {
     // Image is optional: either an uploaded file or a pasted image URL.
     const file = body["image"] as File | undefined;
     const imageUrl = body["imageUrl"];
+    const thumbnail = body["thumbnail"];
 
     if (!name || !description || !price || !type) {
       return c.json(
@@ -42,6 +43,7 @@ export const handleCreateProduct = async (c: Context) => {
       {
         fileBuffer,
         imageUrl: typeof imageUrl === "string" ? imageUrl : undefined,
+        thumbnail: typeof thumbnail === "string" ? thumbnail : undefined,
       },
       type as string,
       point ? Number(point) : 0,
@@ -211,6 +213,19 @@ export const handleTracking = async (c: Context) => {
           {
             success: false,
             message: "keyword là bắt buộc khi activity là search",
+          },
+          400,
+        );
+      }
+      if (
+        ["view", "click", "buy"].includes(event.activity) &&
+        !event.productId &&
+        !event.inventoryId
+      ) {
+        return c.json(
+          {
+            success: false,
+            message: "productId hoặc inventoryId là bắt buộc khi activity là view, click, buy",
           },
           400,
         );

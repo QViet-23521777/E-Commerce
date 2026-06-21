@@ -6,7 +6,8 @@ export interface PProduct extends Document {
   description: string;
   price: number;
   sale?: number;
-  imageUrl: string;
+  imageUrl: string[];
+  thumbnail?: string;
   type: string;
   point: number;
   numPurchases?: number;
@@ -46,7 +47,9 @@ export const ProductSchema = new Schema(
 
     sale: { type: Number, default: 0 },
 
-    imageUrl: { type: String },
+    imageUrl: { type: [String], default: [] },
+
+    thumbnail: { type: String },
 
     type: { type: String },
 

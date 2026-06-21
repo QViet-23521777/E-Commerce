@@ -13,8 +13,8 @@ export const validateActivity = async (c: Context, next: Next) => {
     errors.push(`activity phải là: ${VALID_ACTIVITIES.join(", ")}`);
   if (activity === "search" && !body.keyword)
     errors.push("keyword là bắt buộc khi activity là search");
-  if (["view", "click", "buy"].includes(activity) && !body.productId)
-    errors.push("productId là bắt buộc khi activity là view, click, buy");
+  if (["view", "click", "buy"].includes(activity) && !body.productId && !body.inventoryId)
+    errors.push("productId hoặc inventoryId là bắt buộc khi activity là view, click, buy");
 
   if (errors.length > 0) {
     return c.json({ success: false, errors }, 400);

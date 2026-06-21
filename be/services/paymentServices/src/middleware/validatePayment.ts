@@ -1,7 +1,7 @@
 import { Context, Next } from "hono";
 
 type CreatePaymentItemInput = {
-  productId: string;
+  inventoryId: string;
   quantity: number;
 };
 
@@ -42,8 +42,8 @@ export const validateCreateMomoPayment = async (c: Context, next: Next) => {
       errors.push("items must be a non-empty array when provided");
     } else {
       body.items.forEach((item, index) => {
-        if (!item.productId || item.productId.trim() === "") {
-          errors.push(`items[${index}].productId is required`);
+        if (!item.inventoryId || item.inventoryId.trim() === "") {
+          errors.push(`items[${index}].inventoryId is required`);
         }
 
         if (!Number.isInteger(item.quantity) || item.quantity <= 0) {

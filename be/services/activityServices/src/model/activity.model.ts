@@ -4,6 +4,7 @@ export interface IUserActivity extends Document {
   userId: string;
   activity: "view" | "search" | "click" | "buy";
   productId?: string;
+  inventoryId?: string;
   keyword?: string;
   categoryId?: string;
   metadata?: Record<string, unknown>;
@@ -24,6 +25,10 @@ const UserActivitySchema = new Schema<IUserActivity>(
       required: true,
     },
     productId: {
+      type: String,
+      default: null,
+    },
+    inventoryId: {
       type: String,
       default: null,
     },

@@ -18,7 +18,7 @@ export const connectKafkaProducer = async () => {
 
 export const publishActivityEvents = async (
   userId: string,
-  items: { productId: string; quantity: number }[],
+  items: { inventoryId: string; productId?: string | null; quantity: number }[],
 ) => {
   if (!connected) await connectKafkaProducer();
 
@@ -31,7 +31,27 @@ export const publishActivityEvents = async (
       value: JSON.stringify({
         userId,
         activity: "buy",
-        productId: item.productId,
+        inventoryId: item.inventoryId,
+        productId: item.productId ?? null,
+      }),
+    })),
+  });
+};
+
+export const publishSalesEvent = async (
+  items: { inventoryId: string; productId?: string | null; quantity: number }[],
+) => {
+  if (!connected) await connectKafkaProducer();
+
+  const topic = process.env.KAFKA_PAYMENT_COMPLETED_TOPIC || "payment.completed";
+
+  await producer.send({
+    topic,
+    messages: items.map((item) => ({
+      value: JSON.stringify({
+        inventoryId: item.inventoryId,
+        productId: item.productId ?? null,
+        quantity: item.quantity,
       }),
     })),
   });

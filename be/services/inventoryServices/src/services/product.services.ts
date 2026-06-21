@@ -124,33 +124,38 @@ export const createProduct = async (
   price: number,
   // Image is optional. Supply an uploaded file (→ Cloudinary) OR a direct image
   // URL (→ stored verbatim). When neither is usable, a placeholder is used.
-  image: { fileBuffer?: Buffer; imageUrl?: string },
+  image: { fileBuffer?: Buffer; imageUrl?: string; thumbnail?: string },
   type: string,
   point: number = 0,
   sale?: number,
   numPurchases?: number,
 ) => {
-  let imageUrl: string;
+  let resolvedUrl: string;
   if (image.fileBuffer) {
     // Cloudinary is optional: if credentials are missing/invalid (e.g. local dev),
     // fall back to a deterministic placeholder so listing creation still succeeds.
     try {
-      imageUrl = await uploadToCloudinary(image.fileBuffer);
+      resolvedUrl = await uploadToCloudinary(image.fileBuffer);
     } catch (err) {
       console.warn(
         "[createProduct] Cloudinary upload failed, using placeholder image:",
         (err as { message?: string })?.message ?? err,
       );
-      imageUrl = placeholderImage(name);
+      resolvedUrl = placeholderImage(name);
     }
   } else if (
     typeof image.imageUrl === "string" &&
     /^https?:\/\//i.test(image.imageUrl.trim())
   ) {
-    imageUrl = image.imageUrl.trim();
+    resolvedUrl = image.imageUrl.trim();
   } else {
-    imageUrl = placeholderImage(name);
+    resolvedUrl = placeholderImage(name);
   }
+
+  const thumbnail =
+    typeof image.thumbnail === "string" && /^https?:\/\//i.test(image.thumbnail.trim())
+      ? image.thumbnail.trim()
+      : resolvedUrl;
 
   const normalize = name
     .normalize("NFD")
@@ -162,7 +167,8 @@ export const createProduct = async (
     normalize,
     description,
     price,
-    imageUrl,
+    imageUrl: [resolvedUrl],
+    thumbnail,
     type,
     point,
     ...(sale !== undefined && { sale }),
@@ -422,6 +428,7 @@ export const trackRecommendation = async (data: {
   events: {
     activity: string;
     productId?: string;
+    inventoryId?: string;
     type?: string;
     keyword?: string;
   }[];
@@ -464,6 +471,25 @@ export const trackRecommendation = async (data: {
   let lastPointId: string = "";
   let lastPointNum: number = 0;
 
+  // ─── RESOLVE productId TỪ inventoryId (batch) ───
+  const invIdsNeedingProduct = [
+    ...new Set(
+      events
+        .filter((e) => e.inventoryId && !e.productId)
+        .map((e) => e.inventoryId as string),
+    ),
+  ];
+  const invToProductMap = new Map<string, string>();
+  if (invIdsNeedingProduct.length > 0) {
+    const inventories = await Inventory.find(
+      { _id: { $in: invIdsNeedingProduct } },
+      { productId: 1 },
+    );
+    for (const inv of inventories) {
+      invToProductMap.set(inv._id.toString(), inv.productId.toString());
+    }
+  }
+
   // ─── BATCH LOOKUP TYPE ───
   const idsNeedingType = [
     ...new Set(
@@ -482,7 +508,13 @@ export const trackRecommendation = async (data: {
 
   for (const event of events) {
     console.log("Processing event:", event);
-    let { activity, productId, type, keyword } = event;
+    let { activity, type, keyword } = event;
+    let productId = event.productId;
+
+    // Resolve productId từ inventoryId nếu chưa có
+    if (!productId && event.inventoryId) {
+      productId = invToProductMap.get(event.inventoryId);
+    }
 
     // ─── SEARCH ───
     if (activity === "search" && keyword && keyword !== "") {
