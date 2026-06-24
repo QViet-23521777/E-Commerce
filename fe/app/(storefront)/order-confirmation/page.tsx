@@ -17,6 +17,8 @@ import { useSearchParams } from "next/navigation";
 import { formatVND } from "@/lib/products";
 import { getOrderSnapshot, type OrderSnapshot } from "@/lib/cart";
 import { getPaymentStatus, type Payment, type PaymentStatus } from "@/lib/payments";
+import { getUser } from "@/lib/auth";
+import { postActivity } from "@/lib/activity";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -84,6 +86,19 @@ function ConfirmationContent() {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [orderId]);
+
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (payment?.status !== "paid" || trackedRef.current || !snapshot) return;
+    const user = getUser();
+    if (!user) return;
+    trackedRef.current = true;
+    for (const item of snapshot.items) {
+      if (item.productId) {
+        postActivity({ userId: user.userId, activity: "buy", productId: item.productId });
+      }
+    }
+  }, [payment?.status, snapshot]);
 
   if (loading) {
     return (

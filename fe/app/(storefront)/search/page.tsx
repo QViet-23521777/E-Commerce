@@ -7,6 +7,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { searchProducts, fetchTopByType, fetchTopSale, formatVND, type UIProduct } from "@/lib/products";
 import { addToCart } from "@/lib/cart";
+import { getUser } from "@/lib/auth";
+import { postActivity } from "@/lib/activity";
 import { BROWSE_CATEGORIES } from "@/lib/homepage-data";
 
 const MATERIALS = ["On Sale", "Bestseller", "High Reward Points"];
@@ -51,6 +53,10 @@ function SearchInner() {
       append ? setLoadMoreBusy(true) : setLoading(true);
       try {
         if (q.trim().length >= 2) {
+          if (!append) {
+            const user = getUser();
+            if (user) postActivity({ userId: user.userId, activity: "search", keyword: q.trim() });
+          }
           const res = await searchProducts(q.trim(), 12, c);
           setProducts((prev) => (append ? [...prev, ...res.items] : res.items));
           setCursor(res.nextCursor);

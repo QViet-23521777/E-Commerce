@@ -5,6 +5,8 @@ import { useState } from "react";
 import { ShoppingCart, Check, Star } from "lucide-react";
 import { formatVND } from "@/lib/products";
 import { addToCart } from "@/lib/cart";
+import { getUser } from "@/lib/auth";
+import { postActivity } from "@/lib/activity";
 
 export interface ProductCardProps {
   id: string | number;
@@ -39,6 +41,13 @@ export default function ProductCard({
   const fmt = (n: number) =>
     currency === "VND" ? formatVND(n) : `$${n.toFixed(2)}`;
 
+  const handleClick = () => {
+    const user = getUser();
+    if (user) {
+      postActivity({ userId: user.userId, activity: "click", productId: String(id) });
+    }
+  };
+
   const handleAddToCart = () => {
     addToCart({ productId: String(id), name, image, price, qty: 1 });
     setAdded(true);
@@ -48,7 +57,7 @@ export default function ProductCard({
   if (compact) {
     return (
       <div className="flex-shrink-0 w-40 border border-white/20 bg-white/10 rounded-xl overflow-hidden group hover:border-primary-container transition-colors duration-200">
-        <Link href={`/products/${id}`} className="block">
+        <Link href={`/products/${id}`} className="block" onClick={handleClick}>
           <div className="aspect-square overflow-hidden bg-white/5 p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -78,6 +87,7 @@ export default function ProductCard({
     <div className="border border-deep-navy bg-white flex flex-col group rounded-xl overflow-hidden card-hover">
       <Link
         href={`/products/${id}`}
+        onClick={handleClick}
         className="relative aspect-square border-b border-deep-navy/10 bg-surface-container-low overflow-hidden p-5 block"
       >
         {tag && (

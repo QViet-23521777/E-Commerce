@@ -28,7 +28,8 @@ import {
 import { fetchSellerPublicProfile, type PublicShop } from "@/lib/seller";
 import { addToCart } from "@/lib/cart";
 import { openChatWith } from "@/lib/chat";
-import { isLoggedIn } from "@/lib/auth";
+import { getUser, isLoggedIn } from "@/lib/auth";
+import { postActivity } from "@/lib/activity";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -67,6 +68,11 @@ export default function ProductDetailPage({
       }
       setProduct(p);
       setLoading(false);
+
+      const user = getUser();
+      if (user) {
+        postActivity({ userId: user.userId, activity: "view", productId: p.id });
+      }
 
       fetchShopByProduct(p.id).then(async (stats) => {
         if (cancelled || !stats) return;

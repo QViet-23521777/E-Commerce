@@ -163,7 +163,7 @@ export async function fetchPersonalizedRecommendations(
 ): Promise<UIProduct[]> {
   try {
     const res = await apiRequest<RecommendResponse>(
-      `/api/redis/recommendations/${encodeURIComponent(userId)}/load-more`,
+      `/api/redis/recommendations/${encodeURIComponent(userId)}/items`,
     );
     return (res.data?.items ?? []).map(toUIProduct);
   } catch {

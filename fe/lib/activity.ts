@@ -15,6 +15,20 @@ interface HistoryResponse {
   data: ActivityRecord[];
 }
 
+export async function postActivity(data: {
+  userId: string;
+  activity: "view" | "click" | "buy" | "search";
+  productId?: string;
+  keyword?: string;
+}): Promise<void> {
+  try {
+    await apiRequest("/api/activities", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  } catch { /* không block UI */ }
+}
+
 /** Fetch a user's browse/search/purchase history (most recent first). */
 export async function fetchActivityHistory(
   userId: string,

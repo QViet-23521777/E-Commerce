@@ -5,6 +5,11 @@ import { Request } from "../utils/proxy";
 const router = new Hono();
 const BASE = process.env.INVENTORY_SERVICE_URL || process.env.PRODUCT_SERVICE_URL;
 
+router.get("/recommendations/:userId/items", injectInternalSecret, (c) => {
+  const userId = c.req.param("userId");
+  return Request(c, `${BASE}/api/redis/recommendations/${userId}/items`, "GET");
+});
+
 router.get("/recommendations/:userId/load-more", injectInternalSecret, (c) => {
   const userId = c.req.param("userId");
   return Request(c, `${BASE}/api/redis/recommendations/${userId}/load-more`, "GET");
