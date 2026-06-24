@@ -144,6 +144,9 @@ services:
     networks:
       - ecommerce-net
     restart: on-failure
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -177,6 +180,7 @@ services:
 
 volumes:
   mongo-data:
+  redis-data:
 
 networks:
   ecommerce-net:

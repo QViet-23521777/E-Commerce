@@ -1,5 +1,6 @@
 import { Context } from "hono";
 import { redisService } from "../services/redis.service";
+import { loadMoreRecommendations } from "../services/product.services";
 
 // ─── LẤY RECOMMENDATIONS CHO USER ────────────────────
 export const handleGetRecommendations = async (c: Context) => {
@@ -53,6 +54,29 @@ export const handleGetRecentRecommendations = async (c: Context) => {
         productIds,
         count: productIds.length,
       },
+    });
+  } catch (error: any) {
+    console.error(error);
+    return c.json({ success: false, message: "Internal server error" }, 500);
+  }
+};
+
+// ─── LOAD MORE RECOMMENDATIONS ───────────────────────
+export const handleLoadMoreRecommendations = async (c: Context) => {
+  try {
+    const userId = c.req.param("userId")?.toString() || "";
+    if (!userId) {
+      return c.json({ success: false, message: "userId là bắt buộc" }, 400);
+    }
+
+    const { items, hasMore } = await loadMoreRecommendations(userId);
+    if (items.length === 0 && !hasMore) {
+      return c.json({ success: true, data: { items: [], hasMore: false, count: 0 } });
+    }
+
+    return c.json({
+      success: true,
+      data: { items, hasMore, count: items.length },
     });
   } catch (error: any) {
     console.error(error);

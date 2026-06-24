@@ -8,11 +8,13 @@ import CategorySection from "@/components/CategorySection";
 import CategoryChip from "@/components/CategoryChip";
 import ProductCard from "@/components/ProductCard";
 import { BROWSE_CATEGORIES } from "@/lib/homepage-data";
+import { getUser } from "@/lib/auth";
 import {
   fetchTopByType,
-  fetchTopPoint,
   fetchTopPurchases,
   fetchTopSale,
+  fetchTopPoint,
+  fetchPersonalizedRecommendations,
   type UIProduct,
 } from "@/lib/products";
 
@@ -49,30 +51,42 @@ export default function Home() {
     let cancelled = false;
     (async () => {
       try {
-        const [typeResults, purchases, sale, point] = await Promise.all([
+        const user = getUser();
+
+        const [typeResults, personalized] = await Promise.all([
           Promise.all(FEATURED_TYPES.map((t) => fetchTopByType(t, 4))),
-          fetchTopPurchases(8),
-          fetchTopSale(8),
-          fetchTopPoint(8),
+          user
+            ? fetchPersonalizedRecommendations(user.userId)
+            : Promise.resolve([]),
         ]);
+
         if (cancelled) return;
 
         const map: Record<string, UIProduct[]> = {};
         FEATURED_TYPES.forEach((t, i) => (map[t] = typeResults[i]));
         setByType(map);
 
-        // Mix purchases, sale and point for "Just for You", dedupe.
-        const seen = new Set<string>();
-        const mix: UIProduct[] = [];
-        for (const list of [purchases, point, sale]) {
-          for (const p of list) {
-            if (!seen.has(p.id)) {
-              seen.add(p.id);
-              mix.push(p);
+        if (personalized.length > 0) {
+          setJustForYou(personalized.slice(0, 20));
+        } else {
+          const [purchases, sale, point] = await Promise.all([
+            fetchTopPurchases(8),
+            fetchTopSale(8),
+            fetchTopPoint(8),
+          ]);
+          if (cancelled) return;
+          const seen = new Set<string>();
+          const mix: UIProduct[] = [];
+          for (const list of [purchases, point, sale]) {
+            for (const p of list) {
+              if (!seen.has(p.id)) {
+                seen.add(p.id);
+                mix.push(p);
+              }
             }
           }
+          setJustForYou(mix.slice(0, 20));
         }
-        setJustForYou(mix.slice(0, 20));
       } finally {
         if (!cancelled) setLoading(false);
       }

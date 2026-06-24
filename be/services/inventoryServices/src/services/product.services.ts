@@ -1,8 +1,7 @@
-import { moveMessagePortToContext } from "node:worker_threads";
 import cloudinary from "../config/cloudinary";
-import { Product, PProduct, ProductSchema } from "../models/product.model";
+import { Product, PProduct } from "../models/product.model";
 import Inventory from "../models/inventory.model";
-import { redisService } from "./redis.service";
+import { redisService, RecommendCursors } from "./redis.service";
 import { PipelineStage, Types } from "mongoose";
 const track = {
   price: 0.1,
@@ -180,34 +179,37 @@ export const createProduct = async (
 
 export const getProductById = async (productId: string) => {
   const product = await Product.findOne({ _id: productId, status: "approved" });
-  if (!product) throw new Error("Product does not exists");
+  if (!product) throw new Error("Product does not exist");
   return product;
 };
 
 export const getTopByField = async (field: string, value: unknown) => {
-  const exist = await Product.exists({ [field]: { $exists: true } });
-  if (!exist) throw new Error("Field does not exists");
-  const rs = await Product.find({ [field]: value })
+  const ownedIds = await getOwnedProductIds();
+  const rs = await Product.find({
+    [field]: value,
+    status: "approved",
+    _id: { $in: ownedIds },
+  })
     .sort({ [field]: -1 })
     .limit(10);
-  if (!rs.length) throw new Error(`Field "${field}" does not exist`);
+  if (!rs.length) throw new Error(`No approved products found for ${field} = ${value}`);
   return rs;
 };
 
 export const getTopProductPurchases = async (
   limit: number = 10,
-  lastnumPurchases?: number,
+  lastNumPurchases?: number,
   lastId?: string,
 ) => {
   const query: any = {
     status: "approved",
     _id: { $in: await getOwnedProductIds() },
   };
-  if (lastnumPurchases != undefined && lastId) {
+  if (lastNumPurchases != undefined && lastId) {
     query.$or = [
-      { numPurchases: { $lt: lastnumPurchases } },
+      { numPurchases: { $lt: lastNumPurchases } },
       {
-        numPurchases: lastnumPurchases,
+        numPurchases: lastNumPurchases,
         _id: { $gt: lastId },
       },
     ];
@@ -220,8 +222,8 @@ export const getTopProductPurchases = async (
   const lastItem = items[items.length - 1];
   return {
     items,
-    nextCusor: lastItem
-      ? { lastnumPurchases: lastItem.numPurchases, lastId: lastItem._id }
+    nextCursor: lastItem
+      ? { lastNumPurchases: lastItem.numPurchases, lastId: lastItem._id }
       : null,
   };
 };
@@ -252,7 +254,7 @@ export const getTopSale = async (
   const lastItem = items[items.length - 1];
   return {
     items,
-    nextCusor: lastItem
+    nextCursor: lastItem
       ? { lastSale: lastItem.sale, lastId: lastItem._id }
       : null,
   };
@@ -284,7 +286,7 @@ export const getTopPoint = async (
   const lastItem = items[items.length - 1];
   return {
     items,
-    nextCusor: lastItem
+    nextCursor: lastItem
       ? { lastPoint: lastItem.point, lastId: lastItem._id }
       : null,
   };
@@ -294,11 +296,12 @@ export const getTopByType = async (
   limit: number = 10,
   lastId: string,
   typeInput: string | string[],
+  lastSale?: number,
+  lastNumPurchases?: number,
+  lastPoint?: number,
 ) => {
   const types = Array.isArray(typeInput) ? typeInput : resolveTypes(typeInput);
   const ownedIds = await getOwnedProductIds();
-  const idFilter: Record<string, unknown> = { $in: ownedIds };
-  if (lastId) idFilter.$gt = lastId;
 
   const category = reverseCategoryMap[types[0]] ?? types[0];
   const keywords = categoryKeywords[category] ?? [];
@@ -310,9 +313,22 @@ export const getTopByType = async (
 
   const query: Record<string, unknown> = {
     status: "approved",
-    _id: idFilter,
+    _id: { $in: ownedIds },
     $or: typeFilter,
   };
+
+  if (lastId && lastSale !== undefined && lastNumPurchases !== undefined && lastPoint !== undefined) {
+    query.$and = [
+      {
+        $or: [
+          { sale: { $lt: lastSale } },
+          { sale: lastSale, numPurchases: { $lt: lastNumPurchases } },
+          { sale: lastSale, numPurchases: lastNumPurchases, point: { $lt: lastPoint } },
+          { sale: lastSale, numPurchases: lastNumPurchases, point: lastPoint, _id: { $gt: lastId } },
+        ],
+      },
+    ];
+  }
 
   const items = await Product.find(query)
     .sort({ sale: -1, numPurchases: -1, point: -1, _id: 1 })
@@ -321,8 +337,13 @@ export const getTopByType = async (
   const lastItem = items[items.length - 1];
   return {
     items,
-    nextCusor: lastItem
-      ? { lastPoint: lastItem.point, lastId: lastItem._id }
+    nextCursor: lastItem
+      ? {
+          lastSale: lastItem.sale,
+          lastNumPurchases: lastItem.numPurchases,
+          lastPoint: lastItem.point,
+          lastId: lastItem._id,
+        }
       : null,
   };
 };
@@ -336,7 +357,7 @@ export const getTopByListType = async (limit: number = 5, categories: string[]) 
   }
   items.sort((a, b) => (b.track ?? 0) - (a.track ?? 0));
 
-  return { listItems: items.slice(0, limit) };
+  return { listItems: items };
 };
 
 export const findProduct = async (
@@ -353,7 +374,7 @@ export const findProduct = async (
   const pipeline: PipelineStage[] = [
     {
       $match: {
-        normalize: { $regex: normalizedFind, $options: "i" },
+        normalize: { $regex: normalizedFind.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" },
         status: "approved",
         _id: { $in: await getOwnedProductIds() },
       },
@@ -365,7 +386,7 @@ export const findProduct = async (
             vars: {
               ageInDays: {
                 $divide: [
-                  { $subtract: [new Date(), "$createdAt"] },
+                  { $subtract: ["$$NOW", { $toDate: "$createdAt" }] },
                   1000 * 60 * 60 * 24,
                 ],
               },
@@ -458,6 +479,9 @@ export const trackRecommendation = async (data: {
 
   // ─── CURSOR CHO getTopByType ───
   let lastTopByTypeId: string = "";
+  let lastTopByTypeSale: number | undefined;
+  let lastTopByTypeNumPurchases: number | undefined;
+  let lastTopByTypePoint: number | undefined;
 
   // ─── CURSOR CHO getTopProductPurchases ───
   let lastPurchasesId: string = "";
@@ -492,11 +516,15 @@ export const trackRecommendation = async (data: {
 
   // ─── BATCH LOOKUP TYPE ───
   const idsNeedingType = [
-    ...new Set(
-      events
+    ...new Set([
+      ...events
         .filter((e) => !e.type && e.productId)
         .map((e) => e.productId as string),
-    ),
+      ...events
+        .filter((e) => !e.type && !e.productId && e.inventoryId)
+        .map((e) => invToProductMap.get(e.inventoryId as string))
+        .filter((id): id is string => !!id),
+    ]),
   ];
   const typeMap = new Map<string, string>();
   if (idsNeedingType.length > 0) {
@@ -517,9 +545,9 @@ export const trackRecommendation = async (data: {
     }
 
     // ─── SEARCH ───
-    if (activity === "search" && keyword && keyword !== "") {
+    if (activity === "search" && keyword) {
       const result = await findProduct(
-        keyword.toString(),
+        keyword,
         2,
         lastFindTrack,
         lastFindId,
@@ -549,12 +577,22 @@ export const trackRecommendation = async (data: {
       (activity === "view" || activity === "click" || activity === "search") &&
       type
     ) {
-      const result = await getTopByType(2, lastTopByTypeId, resolveTypes(type));
+      const result = await getTopByType(
+        2,
+        lastTopByTypeId,
+        resolveTypes(type),
+        lastTopByTypeSale,
+        lastTopByTypeNumPurchases,
+        lastTopByTypePoint,
+      );
       console.log(`Top products for type "${type}":`, result);
 
       const lastItem = result.items[result.items.length - 1];
       if (lastItem) {
         lastTopByTypeId = lastItem._id.toString();
+        lastTopByTypeSale = lastItem.sale ?? 0;
+        lastTopByTypeNumPurchases = lastItem.numPurchases ?? 0;
+        lastTopByTypePoint = lastItem.point ?? 0;
         pushItems(result.items);
       }
     }
@@ -609,6 +647,21 @@ export const trackRecommendation = async (data: {
   await redisService.setRecommendationData(userId, {
     productIds: listItems.map((item) => item._id.toString()),
     categories: [...new Set(listItems.map((item) => item.type))],
+    cursors: {
+      lastFindId,
+      lastFindTrack,
+      lastTopByTypeId,
+      lastTopByTypeSale,
+      lastTopByTypeNumPurchases,
+      lastTopByTypePoint,
+      lastPurchasesId,
+      lastPurchasesNum,
+      lastSaleId,
+      lastSaleNum,
+      lastPointId,
+      lastPointNum,
+    },
+    hasMore: true,
     updatedAt: new Date(),
   });
 
@@ -624,6 +677,9 @@ export const trackRecommendation = async (data: {
       lastFindId,
       lastFindTrack,
       lastTopByTypeId,
+      lastTopByTypeSale,
+      lastTopByTypeNumPurchases,
+      lastTopByTypePoint,
       lastPurchasesId,
       lastPurchasesNum,
       lastSaleId,
@@ -645,20 +701,19 @@ export const trackingWithoutData = async (
 ) => {
   const listItems: PProduct[] = [];
 
-  const resultPurchases = await getTopProductPurchases(
-    2,
-    lastPurchasesNum,
-    lastPurchasesId,
-  );
-  const lastPurchasesItem =
-    resultPurchases.items[resultPurchases.items.length - 1];
+  const [resultPurchases, resultPoint, resultSale] = await Promise.all([
+    getTopProductPurchases(2, lastPurchasesNum, lastPurchasesId),
+    getTopPoint(2, lastPointNum, lastPointId),
+    getTopSale(2, lastSaleNum, lastSaleId),
+  ]);
+
+  const lastPurchasesItem = resultPurchases.items[resultPurchases.items.length - 1];
   if (lastPurchasesItem) {
     lastPurchasesId = lastPurchasesItem._id.toString();
     lastPurchasesNum = lastPurchasesItem.numPurchases ?? 0;
     listItems.push(...resultPurchases.items);
   }
 
-  const resultPoint = await getTopPoint(2, lastPointNum, lastPointId);
   const lastPointItem = resultPoint.items[resultPoint.items.length - 1];
   if (lastPointItem) {
     lastPointId = lastPointItem._id.toString();
@@ -666,7 +721,6 @@ export const trackingWithoutData = async (
     listItems.push(...resultPoint.items);
   }
 
-  const resultSale = await getTopSale(2, lastSaleNum, lastSaleId);
   const lastSaleItem = resultSale.items[resultSale.items.length - 1];
   if (lastSaleItem) {
     lastSaleId = lastSaleItem._id.toString();
@@ -702,6 +756,143 @@ export const trackingWithoutData = async (
   };
 };
 
+export const initRecommendationForUser = async (userId: string) => {
+  const result = await trackingWithoutData();
+  await redisService.setRecommendationData(userId, {
+    productIds: result.items.map((item) => item._id.toString()),
+    categories: [...new Set(result.items.map((item) => item.type))],
+    cursors: {
+      lastFindId: "",
+      lastFindTrack: 0,
+      lastTopByTypeId: "",
+      lastTopByTypeSale: undefined,
+      lastTopByTypeNumPurchases: undefined,
+      lastTopByTypePoint: undefined,
+      lastPurchasesId: result.cursors.lastPurchasesId,
+      lastPurchasesNum: result.cursors.lastPurchasesNum,
+      lastSaleId: result.cursors.lastSaleId,
+      lastSaleNum: result.cursors.lastSaleNum,
+      lastPointId: result.cursors.lastPointId,
+      lastPointNum: result.cursors.lastPointNum,
+    },
+    hasMore: true,
+    updatedAt: new Date(),
+  });
+  return result;
+};
+
+const LOAD_MORE_PAGE = 7;
+
+export const loadMoreRecommendations = async (userId: string) => {
+  const cached = await redisService.getRecommendation(userId);
+  if (!cached || !cached.hasMore) {
+    return { items: [], hasMore: false };
+  }
+
+  const { cursors, categories, productIds: existingIds } = cached;
+  const existingSet = new Set(existingIds);
+  const listItemsMap = new Map<string, PProduct>();
+
+  const pushNew = (items: PProduct[]) => {
+    for (const item of items) {
+      const id = item._id.toString();
+      if (!existingSet.has(id) && !listItemsMap.has(id)) {
+        listItemsMap.set(id, item);
+      }
+    }
+  };
+
+  let {
+    lastTopByTypeId,
+    lastTopByTypeSale,
+    lastTopByTypeNumPurchases,
+    lastTopByTypePoint,
+    lastPurchasesId,
+    lastPurchasesNum,
+    lastSaleId,
+    lastSaleNum,
+    lastPointId,
+    lastPointNum,
+  } = cursors;
+
+  if (categories.length > 0) {
+    const result = await getTopByType(
+      LOAD_MORE_PAGE,
+      lastTopByTypeId,
+      categories,
+      lastTopByTypeSale,
+      lastTopByTypeNumPurchases,
+      lastTopByTypePoint,
+    );
+    const lastItem = result.items[result.items.length - 1];
+    if (lastItem) {
+      lastTopByTypeId = lastItem._id.toString();
+      lastTopByTypeSale = lastItem.sale ?? 0;
+      lastTopByTypeNumPurchases = lastItem.numPurchases ?? 0;
+      lastTopByTypePoint = lastItem.point ?? 0;
+    }
+    pushNew(result.items);
+  }
+
+  const [resultPurchases, resultPoint, resultSale] = await Promise.all([
+    getTopProductPurchases(LOAD_MORE_PAGE, lastPurchasesNum, lastPurchasesId),
+    getTopPoint(LOAD_MORE_PAGE, lastPointNum, lastPointId),
+    getTopSale(LOAD_MORE_PAGE, lastSaleNum, lastSaleId),
+  ]);
+
+  const lastPurchasesItem = resultPurchases.items[resultPurchases.items.length - 1];
+  if (lastPurchasesItem) {
+    lastPurchasesId = lastPurchasesItem._id.toString();
+    lastPurchasesNum = lastPurchasesItem.numPurchases ?? 0;
+  }
+  pushNew(resultPurchases.items);
+
+  const lastPointItem = resultPoint.items[resultPoint.items.length - 1];
+  if (lastPointItem) {
+    lastPointId = lastPointItem._id.toString();
+    lastPointNum = lastPointItem.point ?? 0;
+  }
+  pushNew(resultPoint.items);
+
+  const lastSaleItem = resultSale.items[resultSale.items.length - 1];
+  if (lastSaleItem) {
+    lastSaleId = lastSaleItem._id.toString();
+    lastSaleNum = lastSaleItem.sale ?? 0;
+  }
+  pushNew(resultSale.items);
+
+  const newItems = Array.from(listItemsMap.values());
+  for (const item of newItems) {
+    item.track = computeTrack(item);
+  }
+  newItems.sort((a, b) => (b.track ?? 0) - (a.track ?? 0));
+
+  const hasMore = newItems.length > 0;
+
+  const newCursors: RecommendCursors = {
+    ...cursors,
+    lastTopByTypeId,
+    lastTopByTypeSale,
+    lastTopByTypeNumPurchases,
+    lastTopByTypePoint,
+    lastPurchasesId,
+    lastPurchasesNum,
+    lastSaleId,
+    lastSaleNum,
+    lastPointId,
+    lastPointNum,
+  };
+
+  await redisService.appendRecommendation(
+    userId,
+    newItems.map((item) => item._id.toString()),
+    newCursors,
+    hasMore,
+  );
+
+  return { items: newItems, hasMore };
+};
+
 export const listProductsByStatus = async (
   status: string = "pending",
   limit: number = 50,
@@ -732,10 +923,10 @@ export const setProductStatus = async (
     throw new Error("INVALID_STATUS");
   }
   const update: Record<string, unknown> = { status };
-  update.rejectionReason = status === "rejected" ? reason ?? "" : undefined;
+  update.rejectionReason = status === "rejected" ? reason ?? "" : "";
   const product = await Product.findByIdAndUpdate(productId, update, {
     new: true,
   });
-  if (!product) throw new Error("Product does not exists");
+  if (!product) throw new Error("Product does not exist");
   return product;
 };

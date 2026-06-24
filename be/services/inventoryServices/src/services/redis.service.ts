@@ -1,6 +1,29 @@
 import Redis from "ioredis";
 import { config } from "../config";
 
+export type RecommendCursors = {
+  lastFindId: string;
+  lastFindTrack: number;
+  lastTopByTypeId: string;
+  lastTopByTypeSale?: number;
+  lastTopByTypeNumPurchases?: number;
+  lastTopByTypePoint?: number;
+  lastPurchasesId: string;
+  lastPurchasesNum: number;
+  lastSaleId: string;
+  lastSaleNum: number;
+  lastPointId: string;
+  lastPointNum: number;
+};
+
+type RecommendData = {
+  productIds: string[];
+  categories: string[];
+  cursors: RecommendCursors;
+  hasMore: boolean;
+  updatedAt: Date;
+};
+
 class RedisServices {
   private client: Redis;
   private eventQueue: Map<string, any[]> = new Map();
@@ -20,9 +43,7 @@ class RedisServices {
       this.eventQueue.set(userId, []);
     }
     const queue = this.eventQueue.get(userId);
-    if (!queue) {
-      return;
-    }
+    if (!queue) return;
     queue.push(event);
   }
 
@@ -45,14 +66,7 @@ class RedisServices {
     return await this.client.lrange(`Recommend:${userId}`, 0, 49);
   }
 
-  async setRecommendationData(
-    userId: string,
-    data: {
-      productIds: string[];
-      categories: string[];
-      updatedAt: Date;
-    },
-  ): Promise<void> {
+  async setRecommendationData(userId: string, data: RecommendData): Promise<void> {
     await this.client.setex(
       `recommend:${userId}`,
       60 * 60 * 24,
@@ -60,13 +74,26 @@ class RedisServices {
     );
   }
 
-  async getRecommendation(userId: string): Promise<{
-    productIds: string[];
-    categories: string[];
-    updatedAt: Date;
-  } | null> {
+  async getRecommendation(userId: string): Promise<RecommendData | null> {
     const data = await this.client.get(`recommend:${userId}`);
     return data ? JSON.parse(data) : null;
+  }
+
+  async appendRecommendation(
+    userId: string,
+    newProductIds: string[],
+    cursors: RecommendCursors,
+    hasMore: boolean,
+  ): Promise<void> {
+    const cached = await this.getRecommendation(userId);
+    const merged = [...new Set([...(cached?.productIds ?? []), ...newProductIds])];
+    await this.setRecommendationData(userId, {
+      productIds: merged,
+      categories: cached?.categories ?? [],
+      cursors,
+      hasMore,
+      updatedAt: new Date(),
+    });
   }
 
   async disconnect(): Promise<void> {

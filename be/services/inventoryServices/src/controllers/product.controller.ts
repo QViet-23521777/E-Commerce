@@ -10,6 +10,7 @@ import {
   findProduct,
   trackRecommendation,
   trackingWithoutData,
+  initRecommendationForUser,
   listProductsByStatus,
   setProductStatus,
 } from "../services/product.services";
@@ -65,7 +66,7 @@ export const ProductById = async (c: Context) => {
     const product = await getProductById(productId);
     return c.json({ success: true, data: product });
   } catch (error: any) {
-    if (error.message === "Product does not exists") {
+    if (error.message === "Product does not exist") {
       return c.json({ success: false, message: error.message }, 404);
     }
     return c.json({ success: false, message: "Internal server error" }, 500);
@@ -126,8 +127,11 @@ export const handleGetTopByType = async (c: Context) => {
     const type = c.req.param("type")?.toString() || "";
     const limit = Number(c.req.query("limit")) || 10;
     const lastId = c.req.query("lastId") || "";
+    const lastSale = c.req.query("lastSale") ? Number(c.req.query("lastSale")) : undefined;
+    const lastNumPurchases = c.req.query("lastNumPurchases") ? Number(c.req.query("lastNumPurchases")) : undefined;
+    const lastPoint = c.req.query("lastPoint") ? Number(c.req.query("lastPoint")) : undefined;
 
-    const result = await getTopByType(limit, lastId, type);
+    const result = await getTopByType(limit, lastId, type, lastSale, lastNumPurchases, lastPoint);
     return c.json({ success: true, ...result });
   } catch (error) {
     return c.json({ success: false, message: "Internal server error" }, 500);
@@ -181,8 +185,14 @@ export const handleFindProduct = async (c: Context) => {
 
 export const handleTracking = async (c: Context) => {
   try {
-    const body = await c.req.json();
-    const { events } = body;
+    let body: Record<string, unknown> = {};
+    try {
+      const text = await c.req.text();
+      if (text?.trim()) body = JSON.parse(text);
+    } catch {
+      body = {};
+    }
+    const { events } = body as { events?: any[] };
     const userId = c.req.param("userId") || "";
     if (!userId) {
       return c.json({ success: false, message: "userId là bắt buộc" }, 400);
@@ -194,7 +204,7 @@ export const handleTracking = async (c: Context) => {
       events,
     );
     if (!Array.isArray(events) || events.length === 0) {
-      const result = await trackingWithoutData();
+      const result = await initRecommendationForUser(userId);
       return c.json({ success: true, ...result });
     }
     const validActivities = ["view", "search", "click", "buy"];
@@ -234,6 +244,7 @@ export const handleTracking = async (c: Context) => {
     const result = await trackRecommendation({ userId, events });
     return c.json({ success: true, ...result });
   } catch (error) {
+    console.error("❌ handleTracking error:", error);
     return c.json({ success: false, message: "Internal server error" }, 500);
   }
 };
@@ -287,11 +298,16 @@ export const handleListModeration = async (c: Context) => {
 export const handleSetProductStatus = async (c: Context) => {
   try {
     const productId = c.req.param("productId") || "";
-    const { status, reason } = await c.req.json();
+    let status = "", reason = "";
+    try {
+      const text = await c.req.text();
+      if (text?.trim()) ({ status = "", reason = "" } = JSON.parse(text));
+    } catch { /* invalid body */ }
+    if (!status) return c.json({ success: false, message: "status là bắt buộc" }, 400);
     const product = await setProductStatus(productId, status, reason);
     return c.json({ success: true, data: product });
   } catch (error: any) {
-    if (error.message === "Product does not exists") {
+    if (error.message === "Product does not exist") {
       return c.json({ success: false, message: error.message }, 404);
     }
     if (error.message === "INVALID_STATUS") {

@@ -44,6 +44,10 @@ const callRecommend = async (userId: string, events: UserActivity[]) => {
 
     const text = await res.text();
     if (!text) return null;
+    if (!res.ok) {
+      console.warn(`⚠️ Recommend service returned ${res.status}:`, text);
+      return null;
+    }
     return JSON.parse(text);
   } catch (err) {
     console.warn("⚠️ Recommend service unavailable, skipping");

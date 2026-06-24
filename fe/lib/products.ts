@@ -7,7 +7,7 @@ export interface BackendProduct {
   description: string;
   price: number;
   sale?: number;
-  imageUrl?: string;
+  imageUrl?: string | string[];
   type?: string;
   point?: number;
   numPurchases?: number;
@@ -48,6 +48,13 @@ export interface UIProduct {
 const FALLBACK_IMG =
   "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&q=80";
 
+function resolveImage(imageUrl: string | string[] | undefined): string {
+  if (Array.isArray(imageUrl)) {
+    return imageUrl[0]?.trim() ? imageUrl[0] : FALLBACK_IMG;
+  }
+  return imageUrl?.trim() ? imageUrl : FALLBACK_IMG;
+}
+
 export function toUIProduct(p: BackendProduct): UIProduct {
   const salePct = Number(p.sale ?? 0);
   const original = Number(p.price ?? 0);
@@ -58,7 +65,7 @@ export function toUIProduct(p: BackendProduct): UIProduct {
     name: p.name,
     price: discounted,
     originalPrice: salePct > 0 ? original : undefined,
-    image: p.imageUrl?.trim() ? p.imageUrl : FALLBACK_IMG,
+    image: resolveImage(p.imageUrl),
     category: p.type,
     description: p.description,
     type: p.type,
@@ -95,6 +102,15 @@ interface ListTypeResponse {
 interface SingleResponse {
   success: boolean;
   data: BackendProduct;
+}
+
+interface RecommendResponse {
+  success: boolean;
+  data: {
+    items: BackendProduct[];
+    hasMore: boolean;
+    count: number;
+  };
 }
 
 export async function fetchTopPurchases(limit = 10): Promise<UIProduct[]> {
@@ -140,6 +156,19 @@ export async function fetchTopByListType(
   const out: UIProduct[] = [];
   for (const r of settled) if (r.status === "fulfilled") out.push(...r.value);
   return out;
+}
+
+export async function fetchPersonalizedRecommendations(
+  userId: string,
+): Promise<UIProduct[]> {
+  try {
+    const res = await apiRequest<RecommendResponse>(
+      `/api/redis/recommendations/${encodeURIComponent(userId)}/load-more`,
+    );
+    return (res.data?.items ?? []).map(toUIProduct);
+  } catch {
+    return [];
+  }
 }
 
 export interface SearchResult {

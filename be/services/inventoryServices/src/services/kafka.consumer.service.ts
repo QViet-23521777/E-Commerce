@@ -96,9 +96,35 @@ class KafkaConsumerService {
             await redisService.addRecommend(userId, productId);
           }
 
+          const interactedIds = sortedProducts.map(([pid]) => pid);
+
+          // Lookup product types thực từ DB
+          const products = await Product.find(
+            { _id: { $in: interactedIds } },
+            { type: 1 },
+          );
+          const productTypes = [...new Set(products.map((p) => p.type).filter(Boolean))];
+
+          // Merge với existing data thay vì ghi đè
+          const existing = await redisService.getRecommendation(userId);
+          const mergedIds = [...new Set([...interactedIds, ...(existing?.productIds ?? [])])];
+          const mergedCategories = [...new Set([...productTypes, ...(existing?.categories ?? [])])];
+
           await redisService.setRecommendationData(userId, {
-            productIds: sortedProducts.map(([pid]) => pid),
-            categories: [...activityTypes].filter(Boolean),
+            productIds: mergedIds,
+            categories: mergedCategories,
+            cursors: existing?.cursors ?? {
+              lastFindId: "",
+              lastFindTrack: 0,
+              lastTopByTypeId: "",
+              lastPurchasesId: "",
+              lastPurchasesNum: 0,
+              lastSaleId: "",
+              lastSaleNum: 0,
+              lastPointId: "",
+              lastPointNum: 0,
+            },
+            hasMore: existing?.hasMore ?? false,
             updatedAt: new Date(),
           });
 

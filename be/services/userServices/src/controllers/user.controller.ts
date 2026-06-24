@@ -109,6 +109,14 @@ export const login = async (c: Context) => {
         )
         .catch(() => {});
     }
+    if (!twoFactorEnabled) {
+      const INVENTORY_URL = process.env.PRODUCT_SERVICE_URL || "http://localhost:3000";
+      fetch(`${INVENTORY_URL}/api/products/recommend/${user._id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      }).catch(() => {});
+    }
     return c.json(
       {
         success: true,
@@ -134,6 +142,12 @@ export const secondFactorAuth = async (c: Context) => {
   try {
     const { userId, otp } = await c.req.json();
     const { user, tokens } = await SecondFactorAuth(userId, otp);
+    const INVENTORY_URL = process.env.PRODUCT_SERVICE_URL || "http://localhost:3000";
+    fetch(`${INVENTORY_URL}/api/products/recommend/${user._id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).catch(() => {});
     return c.json(
       {
         success: true,
