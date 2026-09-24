@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import {
+  adminCreateAuth,
   authenticate,
   checkAdminAuthorization,
   injectInternalSecret,
@@ -25,7 +26,7 @@ router.post("/second-factor-auth", injectInternalSecret, ipWhitelist, (c) =>
   ),
 );
 
-router.post("/create", injectInternalSecret, (c) =>
+router.post("/create", ...adminCreateAuth, injectInternalSecret, (c) =>
   Request(c, `${process.env.USER_SERVICE_URL}/api/admin/create`, "POST"),
 );
 

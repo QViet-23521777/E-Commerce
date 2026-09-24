@@ -31,7 +31,11 @@ export async function POST(request: NextRequest) {
   try {
     const res = await fetch(`${GATEWAY}/api/admin/create`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // The gateway re-checks this code: calling it directly must not skip it.
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-creation-code": secretCode,
+      },
       body: JSON.stringify({ name: name.trim(), email: email.trim() }),
     });
     const data = await res.json().catch(() => ({}));

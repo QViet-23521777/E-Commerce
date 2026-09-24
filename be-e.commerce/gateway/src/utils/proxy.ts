@@ -50,7 +50,15 @@ export const Request = async (
     if (userEmail) headers["x-user-email"] = userEmail;
     if (userRole) headers["x-user-role"] = userRole;
 
-    const response = await fetch(targetUrl, { method, headers, body });
+    // Node's fetch has no default timeout; without this a wedged service holds
+    // the gateway's socket and buffered body indefinitely. Kept below the
+    // 15s inbound timeout in app.ts so the proxy fails first and can answer.
+    const response = await fetch(targetUrl, {
+      method,
+      headers,
+      body,
+      signal: AbortSignal.timeout(10_000),
+    });
     if (response.status === 204) {
       return new Response(null, { status: 204 });
     }
@@ -68,6 +76,24 @@ export const Request = async (
       responseType ? { "Content-Type": responseType } : undefined,
     );
   } catch (error: any) {
-    return c.json({ success: false, message: error.message }, 500);
+    // Oversized chunked body: let it reach bodyLimit in app.ts, which turns it
+    // into a 413. Swallowing it here would report a client error as a 502.
+    if (error?.name === "BodyLimitError") throw error;
+
+    const isTimeout = error?.name === "TimeoutError" || error?.name === "AbortError";
+    // Log the real cause for operators; never return it. error.message carries
+    // container IPs, ports and service names on a connection failure.
+    console.error(
+      `[proxy] ${method} ${url} failed:`,
+      error?.name ?? "Error",
+      error?.message ?? error,
+    );
+    return c.json(
+      {
+        success: false,
+        message: isTimeout ? "Upstream timed out" : "Upstream unavailable",
+      },
+      isTimeout ? 504 : 502,
+    );
   }
 };

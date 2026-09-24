@@ -35,16 +35,22 @@ test("POST /api/admin/login proxies without bearer token", async () => {
   }) as any;
 
   try {
+    process.env.ADMIN_ALLOWED_IPS = "127.0.0.1";
     const app = createApp();
-    const res = await app.request("/api/admin/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        email: "admin@example.com",
-        password: "P@ssw0rd123",
-        token: "invite-token",
-      }),
-    });
+    const res = await app.request(
+      "/api/admin/login",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "admin@example.com",
+          password: "P@ssw0rd123",
+          token: "invite-token",
+        }),
+      },
+      // ipWhitelist reads the socket address; app.request() has none.
+      { incoming: { socket: { remoteAddress: "127.0.0.1" } } },
+    );
     assert.equal(res.status, 200);
     const body = await json(res);
     assert.equal(body?.success, true);

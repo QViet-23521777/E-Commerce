@@ -1,13 +1,13 @@
 import { Context, Next } from "hono";
+import { except } from "hono/combine";
+import { timingSafeEqual } from "crypto";
 import { JwtUtils } from "../utils/jwtUtils";
 
 export const authenticate = async (c: Context, next: Next) => {
   try {
     const authHeader = c.req.header("Authorization");
-    console.log("Auth header:", authHeader);
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.log("❌ Missing or malformed auth header");
       return c.json(
         {
           success: false,
@@ -19,7 +19,6 @@ export const authenticate = async (c: Context, next: Next) => {
 
     const token = authHeader.substring(7);
     const decoded = JwtUtils.verifyToken(token, process.env.JWT_SECRET!);
-    console.log("✅ Token decoded:", decoded);
 
     c.set("userId", decoded.userId);
     c.set("userEmail", decoded.email);
@@ -30,10 +29,12 @@ export const authenticate = async (c: Context, next: Next) => {
     c.req.raw.headers.set("x-user-role", decoded.role ?? "user");
     c.req.raw.headers.set("x-internal-secret", process.env.INTERNAL_SECRET!);
 
-    console.log("✅ User authenticated:", decoded.email);
     await next();
   } catch (error) {
-    console.error("❌ Auth error:", error);
+    console.error(
+      "[auth] token verification failed:",
+      error instanceof Error ? error.message : "unknown error",
+    );
     return c.json({ success: false, message: "Authentication failed" }, 401);
   }
 };
@@ -60,17 +61,12 @@ export const authorize = (...roles: string[]) => {
 
 export const injectInternalSecret = async (c: Context, next: Next) => {
   c.req.raw.headers.set("x-internal-secret", process.env.INTERNAL_SECRET!);
-  console.log("✅ Injected internal secret");
   await next();
 };
 
 export const checkAdminAuthorization = async (c: Context, next: Next) => {
-  console.log("Checking admin authorization...");
   const role =
     (c.get("userRole") as string | undefined) ?? c.req.header("x-user-role");
-  console.log("Role value:", role);
-  console.log("Role type:", typeof role);
-  console.log("Role length:", role?.length);
 
   // A superadmin is strictly more privileged than an admin and must pass any
   // admin gate. The admin auth service (admin.services.ts) already treats both
@@ -85,6 +81,39 @@ export const checkAdminAuthorization = async (c: Context, next: Next) => {
       403,
     );
   }
-  console.log("✅ User authorized as admin");
   await next();
 };
+
+const secretMatches = (received: string, expected: string | undefined) => {
+  if (!expected) return false;
+  const a = Buffer.from(received, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
+// Admin invites come from two places: a logged-in admin, or the public
+// /admin/register page, which collects ADMIN_CREATION_CODE. The code is checked
+// here and not only in Next.js, so calling the gateway directly can't skip it.
+// Unset ADMIN_CREATION_CODE = no code is ever accepted.
+const creationCode = async (c: Context, next: Next) => {
+  const code = c.req.header("x-admin-creation-code");
+  if (code === undefined) return next();
+
+  if (!secretMatches(code, process.env.ADMIN_CREATION_CODE)) {
+    return c.json({ success: false, message: "INVALID_SECRET" }, 403);
+  }
+  // Minimal identity so the user service's requireAdmin accepts the call.
+  c.set("viaCreationCode", true);
+  c.req.raw.headers.set("x-user-id", "admin-creation-code");
+  c.req.raw.headers.set("x-user-role", "admin");
+  await next();
+};
+
+export const adminCreateAuth = [
+  creationCode,
+  except(
+    (c) => c.get("viaCreationCode") === true,
+    authenticate,
+    checkAdminAuthorization,
+  ),
+] as const;
